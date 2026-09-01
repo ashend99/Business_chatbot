@@ -1,0 +1,23 @@
+Project core idea
+
+1. Client onboarding by superuser
+- Superuser uses admin UI to onboard the tenant
+- Onboard process collects required details from the tenant
+- After the onboarding process, admin sends an email including the superuser dashboard URL 
+  & a temp. password to login to the dashboard. Tenant should signup with the password to activate the account. Then he/she will be able to create own username and password for later sign ins.
+
+2. Client dashboard
+- Client dashboard contains several pages.
+    - Documents: clients can upload, update, delete documents. These contain textual data of business like working hours,refunding policies, etc.
+    - Catalog: clients can create their own catalog in a hierarchical manner. They can add, delete, edit the hierarchy, product items.
+    - Leads: clients can see their lead generations
+    - Sales: clients can see their sales metrics with graphs, tables
+    - Settings: clients can edit settings related to the dashboard and chatbot. This is the only place that client can change the bot settings.
+
+3. Chatbot
+- When users message to client's inbox (fb, insta or whatever), bot continues the conversation. Users can disable the bot replies from the bot settings in the dashboard.
+- Bots are upto place order. Payments are done between client & user. No bot involvement there.
+- Chatbot have access only for documents and catalog. No leads, sales and settings access.
+
+
+Dashboards can be deployed in somewhere like vercel, but not sure with scaling. But I have no idea how to connect chatbot to inbox, may be N8N can be used there.

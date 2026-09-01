@@ -1,0 +1,20 @@
+graph TB
+    subgraph Frontends
+        SU["Superuser UI (Next.js, Vercel)"]
+        CD["Client Dashboard (Next.js, Vercel)"]
+    end
+    subgraph Backend["FastAPI backend (single deployable, modular routers)"]
+        AdminAPI["/superadmin — tenants, provisioning, invites"]
+        TenantAPI["/tenant — documents, catalog, leads, sales, settings"]
+        BotAPI["/bot — RAG over docs+catalog, create-lead only"]
+    end
+    DB[("Postgres + pgvector")]
+    N8N["n8n — channel adapter workflows"]
+    Channels["Facebook / Instagram / WhatsApp / Website widget"]
+
+    SU --> AdminAPI
+    CD --> TenantAPI
+    Channels --> N8N --> BotAPI
+    AdminAPI --> DB
+    TenantAPI --> DB
+    BotAPI --> DB
