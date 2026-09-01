@@ -27,7 +27,7 @@ on tables/endpoints from the previous phases.
 |---|---|
 | Multi-tenancy isolation | Shared Postgres, `tenant_id` on every tenant-scoped table, enforced at app layer (mandatory query filter) + Postgres RLS as defense-in-depth |
 | Bot's data access | Bot can **read** Documents + Catalog only. It can **create** leads (write-only — no read/list/update of existing leads, sales, or settings) |
-| Superuser vs tenant users | Separate tables (`platform_admins` vs `tenant_users`) — no shared "is_admin" flag that could be misconfigured |
+| Superuser vs tenant users | Superuser auth is env-configured credentials (no DB table); `Tenant` holds its own login (`email`/`activation_password_hash`) instead of a separate `tenant_users` table — single login per tenant for MVP (see Phase 0 for the trade-off) |
 | Onboarding | Superuser creates tenant + invite → tenant activates with temp password → sets own credentials |
 | Sales module | No separate sales entity — computed from `leads.status = converted` + manually entered `deal_value` |
 | Channel integration | n8n normalizes every channel into `{tenant_id, external_user_id, message}` and calls one internal `/bot/message` endpoint — backend stays channel-agnostic |
@@ -51,8 +51,7 @@ src/app/
     base.py         # Base, TimestampMixin, TenantScopedMixin (already exists)
     session.py      # async engine + AsyncSession factory + get_db_session()
   models/           # SQLAlchemy ORM only, one file per domain area:
-                    #   tenants.py, documents.py, catalog.py, conversations.py, leads.py, settings.py
-  schemas/          # Pydantic request/response models — filenames mirror models/
+                    #   tenants.py, documents.py, catalog.py, conversations.py, leads.py, settings.py  schemas/          # Pydantic request/response models — filenames mirror models/
   repos/            # query functions — filenames mirror models/; every tenant-scoped
                     #   function takes tenant_id as an explicit argument, never a global query
   services/         # business logic orchestration (email, onboarding, chunking,
@@ -69,7 +68,7 @@ database/alembic/   # migrations — script_location points here from alembic.in
 ```
 
 `models/__init__.py` must import every model module (e.g.
-`from .tenants import Tenant, PlatformAdmin, ...`) so `Base.metadata` is
+`from .tenants import Tenant, ...`) so `Base.metadata` is
 complete before Alembic autogenerate runs — it's empty right now, which is a
 blocker for Phase 0's first migration.
 

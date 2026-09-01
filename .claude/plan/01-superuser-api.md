@@ -17,7 +17,7 @@ Phase 0 (tenancy schema, auth, invite/activation flow).
 | GET | `/superadmin/tenants/{id}` | Tenant detail incl. owner user + status |
 | PATCH | `/superadmin/tenants/{id}` | Update business details, change status |
 | POST | `/superadmin/tenants/{id}/resend-invite` | Invalidate old token, issue + send a new one |
-| POST | `/superadmin/tenants/{id}/suspend` | Sets `tenants.status = suspended` — blocks all tenant logins and bot traffic for that tenant |
+| POST | `/superadmin/tenants/{id}/suspend` | Sets `tenants.is_active = false` — blocks tenant login and bot traffic for that tenant |
 | POST | `/superadmin/tenants/{id}/reactivate` | Reverses suspend |
 
 ### `POST /superadmin/tenants` request shape
@@ -26,11 +26,14 @@ Phase 0 (tenancy schema, auth, invite/activation flow).
 {
   "name": "Acme Cafe",
   "slug": "acme-cafe",
-  "owner_email": "owner@acmecafe.com"
+  "email": "owner@acmecafe.com",
+  "contact_person": "Jane Doe",
+  "contact_number": "+1 555 0100",
+  "address": "123 Main St"
 }
 ```
 
-Response includes the created tenant + owner user (no password/token in the
+Response includes the created tenant (no password/token in the
 response — those only go out via email).
 
 ## Email sending
@@ -55,15 +58,16 @@ When a tenant is `suspended`:
 | File | Contents |
 |---|---|
 | `src/app/schemas/tenants.py` | Add `TenantUpdate`, `TenantListItem`, `TenantDetail` (extends Phase 0's schemas) |
-| `src/app/repos/tenants.py` | Add `list_tenants(session, status=None, search=None, page, page_size)`, `update_tenant(session, tenant_id, **fields)`, `set_tenant_status(session, tenant_id, status)`, `invalidate_pending_invites(session, tenant_user_id)` |
+| `src/app/repos/tenants.py` | Add `list_tenants(session, is_active=None, search=None, page, page_size)`, `update_tenant(session, tenant_id, **fields)`, `set_tenant_active(session, tenant_id, is_active)`, `invalidate_pending_invites(session, tenant_id)` |
 | `src/app/services/onboarding.py` | Add `resend_invite(session, email_sender, tenant_id)` — calls `invalidate_pending_invites` then re-runs the invite-creation half of `onboard_tenant` |
 | `src/app/services/email.py` | Add the real provider implementation (e.g. `SmtpEmailSender` or a provider SDK wrapper), selected in `core/config.py` via `email_backend` |
 | `src/app/api/superadmin/tenants.py` | `APIRouter(prefix="/superadmin/tenants")`: the 6 endpoints below — all behind `get_current_platform_admin` |
 | `src/app/main.py` | `app.include_router(superadmin_tenants_router)` |
 
 Suspend enforcement touches two other phases' code once they exist:
-`core/deps.py`'s `get_current_tenant_user` (Phase 0) and `services/bot_engine.py`'s
-top-of-pipeline check (Phase 4) both need to read `tenants.status`.
+`core/deps.py`'s `get_current_tenant_id` (Phase 0), `POST /auth/tenant/login`
+(Phase 0), and `services/bot_engine.py`'s top-of-pipeline check (Phase 4) all
+need to read `tenants.is_active`.
 
 ## Task checklist
 
@@ -71,6 +75,7 @@ top-of-pipeline check (Phase 4) both need to read `tenants.status`.
 2. `services/email.py`: real `EmailSender` implementation (console stays as the dev/test default)
 3. `api/superadmin/tenants.py`: the 6 endpoints, wired into `main.py`
 4. Confirm suspend is actually checked in `core/deps.py` (Phase 0 code) and note the same check needs adding to `services/bot_engine.py` once Phase 4 exists
+5. `is_active=false` (suspend) also blocks `POST /auth/tenant/login` — check it there too, not just in `get_current_tenant_id`
 
 ## Test plan
 
@@ -83,4 +88,4 @@ top-of-pipeline check (Phase 4) both need to read `tenants.status`.
 
 - Platform admin analytics/usage dashboards
 - Billing/plan tiers
-- Multi-user superuser accounts/roles (single flat `platform_admins` table is enough for MVP)
+- Multi-user superuser accounts/roles (env-configured single credential pair is enough for MVP; introduce a `platform_admins` table only if a second operator needs their own login)
