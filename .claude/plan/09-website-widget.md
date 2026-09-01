@@ -50,12 +50,24 @@ Phase 4 (bot engine), Phase 7 (site keys + branding settings).
   info" confirmation state), but the underlying widget UI doesn't need
   special-casing beyond showing the assistant's `reply` text
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `src/app/schemas/widget.py` | `WidgetSessionRequest` (`site_key`), `WidgetSessionResponse` (`session_token`, `conversation_id`, plus the branding fields read alongside it) |
+| `src/app/core/deps.py` | Add `get_current_widget_session` — decodes the widget session JWT (distinct claim shape: `{tenant_id, conversation_id, scope: "widget_session"}`), and rejects if the request's `conversation_id` (path/body) doesn't match the token's — this is what keeps a stolen token scoped to one conversation |
+| `src/app/repos/settings.py` | Add `get_api_key_by_prefix_or_lookup(session, site_key)` — validates key + `allowed_domains` against the request's `Origin` header |
+| `src/app/api/widget/router.py` | `APIRouter(prefix="/widget")`: `POST /session` — validates site key + origin, creates a `Conversation` (via Phase 4's `repos/conversations.py`), issues the session JWT |
+| `src/app/api/bot/router.py` | **Small edit from Phase 4**: accept either the service API-key dependency (n8n) or `get_current_widget_session` on `POST /message`, resolving `tenant_id`/`conversation_id` from whichever succeeded |
+| `widget/` (new top-level folder, separate small build) | Vanilla TS/JS bundle: chat bubble UI, calls `/widget/session` then `/bot/message`, persists `session_token` in `localStorage` |
+
 ## Task checklist
 
-1. `/widget/session` endpoint (site key validation, origin check, session token issuance)
-2. Session-token auth path on `/bot/message` (distinct from the n8n service credential — scoped to one conversation, can't address others)
-3. Widget JS bundle (bubble UI, session persistence, message send/receive)
-4. Branding fetch wired into the widget's initial load
+1. `api/widget/router.py` (`/widget/session`), wired into `main.py`
+2. `core/deps.py`'s `get_current_widget_session`
+3. Edit `api/bot/router.py` to accept both auth paths
+4. `widget/` JS bundle (bubble UI, session persistence, message send/receive)
+5. Branding fetch (Phase 7's settings) wired into the widget's initial load
 
 ## Test plan
 

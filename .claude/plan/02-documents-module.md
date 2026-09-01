@@ -97,15 +97,29 @@ Retrieval queries always filter `document_chunks.is_active = true` and join to
 - Batch chunks per document into groups (e.g. 100 per API call) to reduce
   request overhead
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `src/app/models/documents.py` | `Document(Base, TenantScopedMixin)`, `DocumentChunk(Base, TenantScopedMixin)` (add `document_id` FK, `embedding: Mapped[list[float]] = mapped_column(Vector(1536))` from `pgvector.sqlalchemy`) |
+| `src/app/models/__init__.py` | Import the two new classes |
+| `src/app/schemas/documents.py` | `DocumentCreate`, `DocumentUpdate`, `DocumentRead`, `DocumentListItem` |
+| `src/app/services/file_parsing.py` | `parse_pdf(data: bytes) -> str` (`pypdf.PdfReader`), `parse_docx(data: bytes) -> str` (`python-docx`), `async def fetch_url_text(url: str) -> str` (`httpx` + `BeautifulSoup`, strip `script`/`style`/`nav`) |
+| `src/app/services/chunking.py` | pure function `chunk_text(text: str, target_tokens=500, overlap_tokens=50) -> list[str]`; if you want real token counts add `tiktoken` as a new dependency, otherwise approximate with `len(text) // 4` — note either way in a code comment since it affects chunk boundaries |
+| `src/app/services/embeddings.py` | `async def embed_texts(texts: list[str]) -> list[list[float]]` — batches of ~100, calls OpenAI embeddings endpoint, retries with backoff on rate-limit errors |
+| `src/app/services/publishing.py` | `async def publish_document(session, tenant_id, document_id)` — orchestrates parse (if needed) → `chunking.chunk_text` → `embeddings.embed_texts` → insert new `DocumentChunk` rows `is_active=False` → on success flip old/new `is_active` and set `documents.status`, on failure set `status=failed` and roll back only the new rows (implement as one DB transaction so partial chunk sets never persist) |
+| `src/app/repos/documents.py` | `list_documents`, `get_document`, `create_document`, `update_document_draft`, `replace_chunks` (the atomic swap used by `publishing.py`), `search_similar_chunks(session, tenant_id, query_embedding, k=5)` using pgvector's `<=>` cosine-distance operator via SQLAlchemy's `Vector.cosine_distance()` |
+| `src/app/api/tenant/documents.py` | `APIRouter(prefix="/tenant/documents")`: the 9 endpoints from the table above |
+
 ## Task checklist
 
-1. Models + migration (incl. pgvector index — `ivfflat` or `hnsw` on `embedding`)
-2. Upload/parse endpoints for PDF/DOCX/TXT
-3. URL import endpoint
-4. Chunking function (pure function, easily unit-testable)
-5. Embedding client wrapper (batches, retries with backoff)
-6. Publish pipeline implementing the safe-publish swap above
-7. CRUD + list/filter endpoints
+1. `models/documents.py` + migration (`pgvector` `Vector(1536)` column, an `ivfflat` or `hnsw` index on `embedding` — add the index in a raw `op.execute(...)` in the Alembic migration, SQLAlchemy/Alembic autogenerate won't create pgvector-specific index types on its own)
+2. `services/file_parsing.py` (PDF/DOCX/TXT/URL)
+3. `services/chunking.py` (pure function — easiest thing in this phase to unit test in isolation)
+4. `services/embeddings.py`
+5. `services/publishing.py` (the safe-publish transaction)
+6. `repos/documents.py`
+7. `api/tenant/documents.py`, wired into `main.py`
 
 ## Test plan
 

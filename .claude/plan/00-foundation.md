@@ -56,12 +56,18 @@ so a bug can't accidentally elevate a tenant user to platform-admin scope.
 |---|---|---|
 | id | UUID pk | |
 | tenant_id | UUID fk → tenants | |
-| email | text | unique per tenant (unique index on `(tenant_id, email)`) |
+| email | text | **globally unique** (see note below) |
 | hashed_password | text nullable | null until activation |
 | role | enum(`owner`) | single value for MVP; enum leaves room to add roles later |
 | status | enum(`invited`,`active`,`suspended`) | default `invited` |
 | must_reset_password | bool | true until first password set |
 | created_at / updated_at | timestamptz | |
+
+> **Correction from the original draft:** `tenant_users.email` must be
+> globally unique, not unique-per-tenant. The tenant login form only asks for
+> email + password (no tenant/slug field), so the backend has to resolve
+> `tenant_id` from the email alone. A per-tenant unique constraint would allow
+> two different tenants to register the same email and make login ambiguous.
 
 ### `invite_tokens`
 | Column | Type | Notes |
@@ -159,15 +165,46 @@ query params, or path.
 - Rate-limit login and activation endpoints (defer implementation detail to
   Phase 11, but keep the endpoints structured so a rate limiter can wrap them)
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `src/app/core/config.py` | `Settings(BaseSettings)`: `database_url`, `jwt_secret`, `jwt_algorithm="HS256"`, `access_token_expire_minutes`, `bcrypt_rounds`, `openai_api_key`, `email_backend` |
+| `src/app/core/security.py` | `hash_password`, `verify_password` (passlib `CryptContext(schemes=["bcrypt"])`), `create_access_token(claims, expires_minutes)`, `decode_access_token(token)`, `generate_raw_token()` (`secrets.token_urlsafe(32)`), `hash_token(raw)` (sha256 hexdigest) |
+| `src/app/db/session.py` | `engine = create_async_engine(settings.database_url)`, `AsyncSessionLocal = async_sessionmaker(engine)`, `async def get_db_session()` yielding a session |
+| `src/app/models/tenants.py` | `Tenant(Base, TimestampMixin)`, `PlatformAdmin(Base, TimestampMixin)`, `TenantUser(Base, TenantScopedMixin)`, `InviteToken(Base, TimestampMixin)`, `TenantApiKey(Base, TenantScopedMixin)`, `ChannelConnection(Base, TenantScopedMixin)` — all in one file since they're identity-adjacent; split later only if the file gets unwieldy |
+| `src/app/models/__init__.py` | Import every class from `tenants.py` (and later phases' modules) so `Base.metadata` is populated |
+| `src/app/schemas/tenants.py` | `TenantCreate`, `TenantRead`, `TenantUserRead`, `LoginRequest`, `TokenResponse`, `ActivateRequest`, `PasswordResetRequest` |
+| `src/app/repos/tenants.py` | `get_tenant_by_id(session, tenant_id)`, `get_tenant_user_by_email(session, email)` (global, per the correction above), `create_tenant_with_owner(session, name, slug, owner_email)`, `create_invite_token(session, tenant_user_id)`, `get_invite_token_by_hash(session, token_hash)`, `mark_invite_used(session, invite_token_id)` |
+| `src/app/services/email.py` | `class EmailSender(Protocol): def send(self, to, subject, body) -> None`, `class ConsoleEmailSender` (logs instead of sending) |
+| `src/app/services/onboarding.py` | `async def onboard_tenant(session, email_sender, name, slug, owner_email) -> Tenant` (creates tenant + invited owner + invite token + sends email), `async def activate_tenant_user(session, raw_token, new_password) -> TenantUser` |
+| `src/app/core/deps.py` | `get_current_platform_admin`, `get_current_tenant_user`, `get_current_tenant_id` — decode JWT via `security.decode_access_token`, check `scope` claim, and for tenant users confirm `tenants.status == active` (query via `repos.tenants.get_tenant_by_id`) before allowing the request through |
+| `src/app/api/auth/router.py` | `APIRouter(prefix="/auth")`: `POST /tenant/login`, `POST /activate`, `POST /request-password-reset`, `POST /reset-password` |
+| `src/app/api/superadmin/auth.py` | `APIRouter(prefix="/superadmin/auth")`: `POST /login` — kept in its own router/module, separate from tenant auth |
+| `src/app/main.py` | `app = FastAPI()`; `app.include_router(auth_router)`; `app.include_router(superadmin_auth_router)` (more routers added as later phases land) |
+
+## Migration workflow (Alembic)
+
+`database/alembic/` currently exists but is empty — it still needs `env.py`,
+`script.py.mako`, and a `versions/` folder.
+
+1. From the repo root: `alembic init database/alembic`
+2. Create `alembic.ini` at the repo root with `script_location = database/alembic`
+3. In `database/alembic/env.py`: `from app.db.base import Base`, `import app.models  # noqa: F401 — populates Base.metadata`, set `target_metadata = Base.metadata`; read the DB URL from `app.core.config.settings.database_url` instead of the `alembic.ini` placeholder
+4. `alembic revision --autogenerate -m "phase 0 foundation"`
+5. Manually add `op.execute("CREATE EXTENSION IF NOT EXISTS vector")` to the generated migration — autogenerate does not create Postgres extensions
+6. Review the generated migration, then `alembic upgrade head`
+
 ## Tasks checklist
 
-1. Alembic baseline migration: enable `pgvector` extension, create all tables above
-2. SQLAlchemy models + Pydantic schemas
-3. Security utils: password hash/verify, JWT encode/decode, token generation/hash
-4. `get_current_platform_admin` / `get_current_tenant_user` FastAPI dependencies
-5. Auth endpoints listed above
-6. Email sending abstraction (`EmailSender` interface, console/log implementation for now — real provider wired in Phase 1)
-7. Seed script for local dev (one platform admin, one demo tenant)
+1. `core/config.py`, `core/security.py`, `db/session.py`
+2. `models/tenants.py` + `models/__init__.py` update
+3. `alembic init` + `env.py` wiring + first migration (steps above)
+4. `schemas/tenants.py`, `repos/tenants.py`
+5. `services/email.py`, `services/onboarding.py`
+6. `core/deps.py`
+7. `api/auth/router.py`, `api/superadmin/auth.py`, wire both into `main.py`
+8. Seed script (`scripts/seed_dev.py` at repo root, run via `python scripts/seed_dev.py`) — one platform admin, one demo tenant, for local dev/testing
 
 ## Test plan
 

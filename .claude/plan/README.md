@@ -34,6 +34,49 @@ on tables/endpoints from the previous phases.
 | IDs | UUID primary keys on all tenant-scoped tables (non-guessable, avoids enumeration) |
 | Payments | Out of scope entirely — bot never touches payment data |
 
+## Code organization conventions
+
+Matches the existing `src/app/` skeleton — put new code in these locations,
+not new top-level folders:
+
+```
+src/app/
+  main.py          # FastAPI() instance + include_router() calls (create in Phase 0)
+  core/
+    config.py       # pydantic-settings Settings — DB URL, JWT secret, OpenAI key, etc.
+    security.py     # password hash/verify, JWT encode/decode, token generation/hashing
+    deps.py         # FastAPI dependencies: get_db_session, get_current_platform_admin,
+                    #   get_current_tenant_user, get_current_tenant_id, get_current_service_tenant
+  db/
+    base.py         # Base, TimestampMixin, TenantScopedMixin (already exists)
+    session.py      # async engine + AsyncSession factory + get_db_session()
+  models/           # SQLAlchemy ORM only, one file per domain area:
+                    #   tenants.py, documents.py, catalog.py, conversations.py, leads.py, settings.py
+  schemas/          # Pydantic request/response models — filenames mirror models/
+  repos/            # query functions — filenames mirror models/; every tenant-scoped
+                    #   function takes tenant_id as an explicit argument, never a global query
+  services/         # business logic orchestration (email, onboarding, chunking,
+                    #   embeddings, publishing, bot_engine, lead_flow, notifications)
+  api/
+    auth/           # shared tenant-user login/activate/reset endpoints
+    superadmin/     # platform admin router(s)
+    tenant/         # one router module per dashboard page: documents.py, catalog.py,
+                    #   leads.py, settings.py, sales.py
+    bot/            # POST /bot/message — only router allowed to import documents/catalog
+                    #   repos and the lead *creation* path; never leads-read/sales/settings
+    widget/         # POST /widget/session (Phase 9)
+database/alembic/   # migrations — script_location points here from alembic.ini at repo root
+```
+
+`models/__init__.py` must import every model module (e.g.
+`from .tenants import Tenant, PlatformAdmin, ...`) so `Base.metadata` is
+complete before Alembic autogenerate runs — it's empty right now, which is a
+blocker for Phase 0's first migration.
+
+When a model is tenant-scoped, inherit `TenantScopedMixin` (already defines
+`id`, `tenant_id`, `created_at`, `updated_at`) instead of redeclaring those
+columns.
+
 ## Phases
 
 | Phase | File | Summary |

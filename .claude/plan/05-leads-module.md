@@ -72,13 +72,24 @@ Reuse the `EmailSender` abstraction from Phase 1:
 - `status=new` → send notification (email + dashboard alert flag)
 - `status=interested` → dashboard-visible only, no email (or a lighter digest — pick one; recommend none for MVP, add a daily digest later if requested)
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `src/app/models/leads.py` | `LeadFieldDef(Base, TenantScopedMixin)`, `Lead(Base, TenantScopedMixin)` (`conversation_id` nullable FK, `matched_variant_id` nullable FK) |
+| `src/app/models/__init__.py` | Import the two new classes |
+| `src/app/schemas/leads.py` | `LeadFieldDefCreate/Read`, `LeadRead`, `LeadListItem`, `LeadUpdate` (status/notes/deal_value only — never field_values, those are bot-write-only) |
+| `src/app/repos/leads.py` | `create_or_update_lead_from_bot(session, tenant_id, conversation_id, matched_variant_id, field_values, status)` — the **only** function `services/lead_flow.py` (Phase 4) may import from this module; separately, `list_leads`, `get_lead`, `update_lead_status_notes_value` for the dashboard-facing router — keep these two groups visually separated in the file (or split into `repos/leads.py` for bot-write and `repos/leads_admin.py` for dashboard-read, if you want the import boundary to be structurally obvious rather than just a comment) |
+| `src/app/services/notifications.py` | `async def notify_new_lead(email_sender, tenant, lead)` — called only when `status` transitions to `new` |
+| `src/app/api/tenant/leads.py` | `APIRouter(prefix="/tenant/leads")`: list/detail/update + `lead-field-defs` GET/PUT |
+
 ## Task checklist
 
-1. Models + migration, seed default field defs on tenant creation
-2. `create_or_update_lead_from_bot` internal function
-3. Client-facing CRUD/list/detail endpoints
-4. Notification hook on `status=new`
-5. Lead-field-defs config endpoints
+1. `models/leads.py` + migration; seed default `LeadFieldDef` rows (name/phone/email) inside `services/onboarding.py`'s `onboard_tenant` (Phase 0) so every new tenant starts with sensible defaults
+2. `repos/leads.py`: bot-write path (`create_or_update_lead_from_bot`) kept import-isolated from the dashboard-read path
+3. `services/notifications.py` + hook it into the bot-write path when `status=new`
+4. `api/tenant/leads.py`, wired into `main.py`
+5. Go back to `services/lead_flow.py` (Phase 4) and wire its `confirmed`/abandonment transitions to actually call `create_or_update_lead_from_bot`
 
 ## Test plan
 

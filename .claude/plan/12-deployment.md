@@ -33,9 +33,19 @@ All prior phases; Phase 11 hardening pass complete before production traffic.
 - Migrations run as an explicit pre-deploy step, not on app startup, so a
   failed migration blocks the deploy rather than half-starting the app
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `Dockerfile` (repo root) | Multi-stage build: install via `uv sync --frozen`, run `alembic upgrade head` as a separate deploy step (not in the image's `CMD`), then `uvicorn app.main:app` |
+| `.dockerignore` (repo root) | Exclude `.venv/`, `dashboard/`, `.git/`, `tests/` from the backend image |
+| `.github/workflows/ci.yml` | lint (`ruff`) → type-check (`mypy`) → test (`pytest`) → (on main) build/push image → run migrations → deploy |
+| `docker-compose.yml` (repo root, local dev only) | Postgres+pgvector image, n8n image, backend — for local end-to-end testing of Phase 10's workflow without hitting real cloud infra |
+| `dashboard/vercel.json` / Vercel project settings | Env vars pointed at the staging/production backend URL |
+
 ## Task checklist
 
-1. Dockerfile for the backend
+1. `Dockerfile` + `.dockerignore` for the backend
 2. Provision managed Postgres (pgvector enabled), run Phase 0's baseline
    migration
 3. Self-host n8n container, import the Phase 10 workflow

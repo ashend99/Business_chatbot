@@ -57,9 +57,29 @@ Phases 0, 2, 3, 5 (all backing APIs).
 - Status dropdown limited to the fixed status set; notes as a free-text
   autosave field
 
+## Where to implement
+
+This is the first phase touching frontend code, which doesn't exist under
+`src/app/` (that's the Python backend package). Recommended: a sibling
+`dashboard/` folder at the repo root, e.g. `dashboard/` containing a standard
+Next.js App Router project (`dashboard/app/...`, `dashboard/package.json`).
+Keeping it in the same repo (monorepo-style, two independently deployable
+projects) avoids cross-repo coordination for an MVP-stage solo/small team;
+split it into its own repo later only if CI/deploy pipelines start conflicting.
+
+| Path | Contents |
+|---|---|
+| `dashboard/app/login/page.tsx` | Login form → calls a Next.js route handler that proxies to `POST /auth/tenant/login`, sets the JWT as an httpOnly cookie |
+| `dashboard/app/activate/page.tsx` | Reads `?token=` param, form for new password → `POST /auth/activate` |
+| `dashboard/app/documents/page.tsx`, `dashboard/app/documents/[id]/page.tsx`, `dashboard/app/documents/new/page.tsx` | Bind to Phase 2's `/tenant/documents*` endpoints |
+| `dashboard/app/catalog/page.tsx`, `dashboard/app/catalog/products/[id]/page.tsx` | Bind to Phase 3's `/tenant/categories*`, `/tenant/products*` endpoints |
+| `dashboard/app/leads/page.tsx`, `dashboard/app/leads/[id]/page.tsx` | Bind to Phase 5's `/tenant/leads*` endpoints |
+| `dashboard/lib/api.ts` | Thin fetch wrapper attaching the auth cookie/JWT to every backend call |
+| `dashboard/components/...` | Shared layout/nav shell, category tree widget, lead field renderer (reads that tenant's `lead_field_defs` schema dynamically — don't hardcode name/phone/email fields in the component) |
+
 ## Task checklist
 
-1. Auth flow (login, activate, protected route wrapper)
+1. `dashboard/` Next.js project scaffold + auth flow (login, activate, cookie-based session, protected-route wrapper)
 2. Documents pages
 3. Catalog tree + product/variant pages
 4. Leads list/detail pages

@@ -68,12 +68,22 @@ sellable item.
 | POST/GET/PATCH/DELETE | `/tenant/products/{id}/variants` (+ `/{variant_id}`) | |
 | GET | `/tenant/catalog/search?q=` | Name/category-aware lookup, used by the bot engine (Phase 4) and dashboard search box |
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `src/app/models/catalog.py` | `Category(Base, TenantScopedMixin)` (self FK `parent_id`), `Product(Base, TenantScopedMixin)`, `Variant(Base, TenantScopedMixin)` (`product_id` FK) |
+| `src/app/models/__init__.py` | Import the three new classes |
+| `src/app/schemas/catalog.py` | `CategoryCreate/Read/Tree`, `ProductCreate/Read`, `VariantCreate/Read` |
+| `src/app/repos/catalog.py` | `get_category_tree(session, tenant_id)` — fetch all categories for the tenant in one query and build the nested tree in Python (simpler and fast enough at this scale than a recursive CTE), `reparent_category(session, tenant_id, category_id, new_parent_id)` with a cycle guard (walk up from `new_parent_id` via the in-memory tree, reject if `category_id` is among the ancestors), `create_product(session, tenant_id, ..., variants=[...])` — auto-creates one default `Variant` if the caller passes none, `search_catalog(session, tenant_id, query)` (`ILIKE` on `variants.name`/`products.name`/`categories.name` to start) |
+| `src/app/api/tenant/catalog.py` | `APIRouter(prefix="/tenant")`: category CRUD + `/categories/tree`, product CRUD, variant CRUD, `/catalog/search` |
+
 ## Task checklist
 
-1. Models + migration, including cycle-guard logic for category reparenting
-2. Category tree endpoints + nested-tree serialization
-3. Product + variant CRUD, with "standalone product → auto-create default variant" behavior
-4. Catalog search endpoint (start with `ILIKE`/trigram on name + category name; revisit if fuzzy matching quality is insufficient once Phase 4 is testing against it)
+1. `models/catalog.py` + migration, including the reparent cycle-guard logic in `repos/catalog.py` (not enforceable at the DB constraint level alone)
+2. `repos/catalog.py`: tree fetch/build, product/variant CRUD with the auto-default-variant behavior, search
+3. `api/tenant/catalog.py`, wired into `main.py`
+4. Revisit `search_catalog`'s matching quality once Phase 4 is actually testing against it — upgrade to `pg_trgm` similarity if plain `ILIKE` misses too many real queries
 
 ## Test plan
 

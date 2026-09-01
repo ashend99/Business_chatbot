@@ -51,13 +51,25 @@ DB round trip on every message):
 - `documents_enabled/catalog_enabled/leads_enabled = false` → that intent
   branch is removed from the router entirely, falling back instead
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `src/app/models/settings.py` | `TenantSettings(Base, TimestampMixin)` — note: use `tenant_id` itself as the primary key/FK (one-to-one with `tenants`), **not** `TenantScopedMixin`, since that mixin gives a separate generated `id` plus `tenant_id`, which you don't want for a strictly one-row-per-tenant table |
+| `src/app/models/__init__.py` | Import `TenantSettings` |
+| `src/app/schemas/settings.py` | `TenantSettingsRead/Update`, `ApiKeyCreate/Read` (the read schema masks the secret — only the create response includes the raw value, once) |
+| `src/app/repos/settings.py` | `get_settings(session, tenant_id)`, `update_settings(session, tenant_id, **fields)`, `create_api_key(session, tenant_id, key_type, allowed_domains=None)`, `list_api_keys(session, tenant_id)`, `revoke_api_key(session, tenant_id, key_id)` |
+| `src/app/services/settings_cache.py` | A small in-process TTL cache (e.g. 30–60s) around `get_settings`, keyed by `tenant_id`, invalidated on `update_settings` — avoids a DB round trip on every `/bot/message` call |
+| `src/app/api/tenant/settings.py` | `APIRouter(prefix="/tenant/settings")`: GET/PUT settings; `APIRouter(prefix="/tenant/api-keys")`: POST/GET/DELETE |
+| `src/app/services/bot_engine.py` | **Edit from Phase 4**: replace the hardcoded persona/toggle defaults with calls through `services/settings_cache.py`; add the `bot_enabled`/module-toggle checks at the top of `handle_message` |
+
 ## Task checklist
 
-1. Model + migration, seeded with sensible defaults on tenant creation
-2. Settings GET/PUT endpoint
-3. API key issuance/list/revoke endpoints (raw secret shown once at creation only, never again)
-4. Wire Phase 4's engine to read real settings instead of hardcoded defaults
-5. Wire Phase 1's suspend logic and this phase's `bot_enabled` to share the same enforcement point in the bot pipeline
+1. `models/settings.py` + migration, seeded with defaults inside `services/onboarding.py`'s `onboard_tenant` (Phase 0)
+2. `repos/settings.py`, `services/settings_cache.py`
+3. `api/tenant/settings.py` (settings + API keys), wired into `main.py`
+4. Go back to `services/bot_engine.py` (Phase 4) and swap hardcoded defaults for real settings + toggle enforcement
+5. Go back to `core/deps.py`/`services/bot_engine.py` and confirm the Phase 1 tenant-suspended check and this phase's `bot_enabled` check live at the same top-of-pipeline spot
 
 ## Test plan
 

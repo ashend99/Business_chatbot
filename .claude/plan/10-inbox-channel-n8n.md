@@ -46,12 +46,22 @@ channel type — tenant is resolved at runtime from the inbound payload:
 7. **HTTP Request node** — send the reply back via the Meta Graph API using
    that tenant's stored access token from `channel_connections`.
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `src/app/schemas/channels.py` | `ChannelConnectRequest/Response`, `TenantResolveResponse` |
+| `src/app/repos/tenants.py` | Add `get_channel_connection_by_external_id(session, channel_type, external_account_id)`, `create_channel_connection(session, tenant_id, ...)` (Fernet-encrypt the access token before insert — use `core/security.py`'s encryption helper, add one if it doesn't exist yet) |
+| `src/app/api/tenant/channels.py` | `APIRouter(prefix="/tenant/channels")`: OAuth start + callback endpoints |
+| `src/app/api/bot/internal.py` | A small internal-only router (still under `/bot` auth, service-credential only): `GET /internal/resolve-tenant?channel_type=...&external_account_id=...` — the one call n8n makes before calling `/bot/message` |
+| `n8n/workflows/*.json` (new top-level folder) | Exported n8n workflow definitions, version-controlled alongside the code that they call |
+
 ## Task checklist
 
-1. OAuth connect flow + callback endpoint, `channel_connections` writes
-2. Internal "resolve tenant by external_account_id" endpoint for n8n to call
-3. n8n workflow: webhook → signature verify → tenant resolve → `/bot/message` → conditional send
-4. Token encryption at rest (Fernet key management — see Phase 11)
+1. `repos/tenants.py` additions + `api/tenant/channels.py` OAuth connect/callback flow
+2. `api/bot/internal.py` tenant-resolve endpoint
+3. Build the n8n workflow (webhook → signature verify → call `/bot/internal/resolve-tenant` → call `/bot/message` → conditional send), export JSON into `n8n/workflows/`
+4. Confirm token encryption (Fernet key from `core/config.py`, sourced from a secret manager — finalized in Phase 11) is actually applied before storage, not just planned
 
 ## Test plan
 

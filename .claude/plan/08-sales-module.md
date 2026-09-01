@@ -26,15 +26,22 @@ No new tables. Relies on `leads.status = 'converted'` and `leads.deal_value`
 All queries filter by `tenant_id` from the JWT, plus optional date-range
 query params.
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `src/app/models/leads.py` | **Small edit from Phase 5**: add `converted_at: Mapped[datetime | None]` to `Lead`, set it when status transitions to `converted` (unambiguous date to aggregate on, instead of overloading `updated_at`) |
+| `src/app/repos/sales.py` | `get_sales_summary(session, tenant_id, date_from, date_to)`, `get_sales_timeseries(session, tenant_id, date_from, date_to, granularity)` (SQL `date_trunc` grouped by `converted_at`), `get_sales_by_product(session, tenant_id, date_from, date_to)` (`GROUP BY matched_variant_id`, joined to `variants`/`products` for display names) |
+| `src/app/schemas/sales.py` | `SalesSummary`, `SalesTimeseriesPoint`, `SalesByProductRow` |
+| `src/app/api/tenant/sales.py` | `APIRouter(prefix="/tenant/sales")`: `/summary`, `/timeseries`, `/by-product` |
+| `dashboard/app/sales/page.tsx` | Summary cards + chart + breakdown table (added to the Phase 6 dashboard app) |
+
 ## Task checklist
 
-1. Aggregation queries (SQL `GROUP BY` on date-truncated `updated_at` or a
-   dedicated `converted_at` timestamp — consider adding `converted_at` to
-   `leads` in a small Phase 5 follow-up migration if `updated_at` alone is
-   ambiguous once multiple status changes happen)
-2. Summary/timeseries/by-product endpoints
-3. Dashboard page: cards for summary totals, a line/bar chart for the
-   timeseries, a table for by-product breakdown
+1. Add `converted_at` to `Lead` (small Alembic migration on top of Phase 5's table)
+2. `repos/sales.py` aggregation queries
+3. `api/tenant/sales.py`, wired into `main.py`
+4. `dashboard/app/sales/page.tsx`
 
 ## Test plan
 

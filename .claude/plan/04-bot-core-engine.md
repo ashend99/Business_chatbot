@@ -146,15 +146,33 @@ enabled/disabled). If a module is off, that branch is simply not reachable —
 route straight to fallback instead. Hardcode all as "on" until Phase 7 wires
 real settings.
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `src/app/models/conversations.py` | `Conversation(Base, TenantScopedMixin)`, `Message(Base, TenantScopedMixin)` (`conversation_id` FK) |
+| `src/app/models/__init__.py` | Import the two new classes |
+| `src/app/schemas/conversations.py` | `BotMessageRequest`, `BotMessageResponse` (matches the JSON contract below) |
+| `src/app/repos/conversations.py` | `get_or_create_conversation(session, tenant_id, channel_type, external_user_id)`, `add_message(session, tenant_id, conversation_id, role, content)`, `get_recent_messages(session, tenant_id, conversation_id, limit=10)`, `update_conversation_state(session, tenant_id, conversation_id, **fields)` |
+| `src/app/services/intent.py` | `async def classify_intent(text, history) -> IntentResult` (dataclass/pydantic model: `intent`, `confidence`, `catalog_query`) — one OpenAI call with a structured-output/JSON-schema response format |
+| `src/app/services/rag.py` | `async def retrieve_chunks(session, tenant_id, query_embedding, k=5)` (calls `repos/documents.py`'s `search_similar_chunks`), `async def generate_answer(persona, chunks, history, question) -> str` |
+| `src/app/services/catalog_lookup.py` | `async def resolve_catalog_query(session, tenant_id, query) -> CatalogMatch` (zero/one/many result handling + the category-tree clarifying-question text) |
+| `src/app/services/lead_flow.py` | `async def advance_lead_flow(session, tenant_id, conversation, message_text) -> LeadFlowResult` — implements the state machine transitions described below; calls into Phase 5's `create_or_update_lead_from_bot` only at the `confirmed`/abandonment points |
+| `src/app/services/bot_engine.py` | `async def handle_message(session, tenant_id, channel_type, external_user_id, text) -> BotMessageResponse` — top-level orchestrator: load/create conversation → check tenant suspended/`bot_enabled` (Phase 1/7) → classify intent → dispatch to `rag.py` / `catalog_lookup.py` / `lead_flow.py` / fallback → persist messages → return reply + actions |
+| `src/app/core/deps.py` | Add `get_current_service_tenant` — validates the caller's API secret key (Phase 0's `tenant_api_keys`, `key_type=api_secret`) and yields `tenant_id`, used by `/bot/message` instead of the JWT-based dependencies |
+| `src/app/api/bot/router.py` | `APIRouter(prefix="/bot")`: `POST /message` calling `services/bot_engine.handle_message` — this module must not import anything from `repos/leads.py` except the single creation function, and must not import `repos/sales.py` or `repos/settings.py`'s read paths at all |
+
 ## Task checklist
 
-1. `conversations`/`messages` models + migration
-2. Intent classification call + prompt
-3. RAG retrieval + generation pipeline
-4. Catalog lookup + disambiguation flow
-5. Lead-capture state machine (transitions only — actual lead persistence is Phase 5)
-6. Idle-nudge check
-7. `POST /bot/message` endpoint wiring it all together
+1. `models/conversations.py` + migration
+2. `repos/conversations.py`
+3. `services/intent.py`
+4. `services/rag.py` (reuses Phase 2's `search_similar_chunks` + `services/embeddings.py`)
+5. `services/catalog_lookup.py` (reuses Phase 3's `search_catalog`)
+6. `services/lead_flow.py` (state machine only — actual persistence added once Phase 5 exists)
+7. `services/bot_engine.py` tying it together
+8. `core/deps.py` service-auth dependency
+9. `api/bot/router.py`, wired into `main.py`
 
 ## Test plan
 

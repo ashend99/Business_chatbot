@@ -50,12 +50,27 @@ When a tenant is `suspended`:
   response (checked at the very top of the bot request pipeline before any
   RAG/catalog work, to avoid wasted LLM calls)
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `src/app/schemas/tenants.py` | Add `TenantUpdate`, `TenantListItem`, `TenantDetail` (extends Phase 0's schemas) |
+| `src/app/repos/tenants.py` | Add `list_tenants(session, status=None, search=None, page, page_size)`, `update_tenant(session, tenant_id, **fields)`, `set_tenant_status(session, tenant_id, status)`, `invalidate_pending_invites(session, tenant_user_id)` |
+| `src/app/services/onboarding.py` | Add `resend_invite(session, email_sender, tenant_id)` — calls `invalidate_pending_invites` then re-runs the invite-creation half of `onboard_tenant` |
+| `src/app/services/email.py` | Add the real provider implementation (e.g. `SmtpEmailSender` or a provider SDK wrapper), selected in `core/config.py` via `email_backend` |
+| `src/app/api/superadmin/tenants.py` | `APIRouter(prefix="/superadmin/tenants")`: the 6 endpoints below — all behind `get_current_platform_admin` |
+| `src/app/main.py` | `app.include_router(superadmin_tenants_router)` |
+
+Suspend enforcement touches two other phases' code once they exist:
+`core/deps.py`'s `get_current_tenant_user` (Phase 0) and `services/bot_engine.py`'s
+top-of-pipeline check (Phase 4) both need to read `tenants.status`.
+
 ## Task checklist
 
-1. Tenant CRUD endpoints + Pydantic schemas
-2. Wire real `EmailSender` (console backend for dev, SMTP/provider for staging+)
-3. Suspend/reactivate logic + the two enforcement points above
-4. Pagination/filtering/search on the list endpoint
+1. `repos/tenants.py`: list/update/suspend/reactivate/resend-invite query functions
+2. `services/email.py`: real `EmailSender` implementation (console stays as the dev/test default)
+3. `api/superadmin/tenants.py`: the 6 endpoints, wired into `main.py`
+4. Confirm suspend is actually checked in `core/deps.py` (Phase 0 code) and note the same check needs adding to `services/bot_engine.py` once Phase 4 exists
 
 ## Test plan
 

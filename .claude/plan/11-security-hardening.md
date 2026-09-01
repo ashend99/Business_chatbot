@@ -9,6 +9,16 @@ on top of the per-phase checks already built in.
 
 All prior phases functionally complete.
 
+## Where to implement
+
+| File | Contents |
+|---|---|
+| `database/alembic/versions/*_add_rls_policies.py` | Raw `op.execute(...)` statements: `ALTER TABLE ... ENABLE ROW LEVEL SECURITY;` + `CREATE POLICY ... USING (tenant_id = current_setting('app.current_tenant_id')::uuid);` per tenant-scoped table |
+| `src/app/db/session.py` | Add a middleware/dependency that runs `SET LOCAL app.current_tenant_id = :tenant_id` at the start of each request's transaction, right after `get_current_tenant_id`/`get_current_service_tenant`/`get_current_widget_session` resolves the tenant |
+| `src/app/core/security.py` | Add Fernet encrypt/decrypt helpers if not already added in Phase 10, sourced from a `fernet_key` setting in `core/config.py` |
+| `src/app/core/rate_limit.py` | `slowapi` (or equivalent) limiter setup; apply to `/auth/*`, `/widget/session`, `/bot/message`, webhook endpoints |
+| CI config (e.g. `.github/workflows/ci.yml`) | Add a `pip-audit` (or equivalent) step against `pyproject.toml`/`uv.lock` |
+
 ## Tasks
 
 **Multi-tenant isolation (defense-in-depth)**
