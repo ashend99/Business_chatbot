@@ -1,0 +1,55 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# uv
+uv.lock.bak
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Alembic (keep migration scripts, ignore local db files)
+*.db
+*.sqlite3
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Uploaded/processed document artifacts (local dev only) -- anchored to the
+# project root so this doesn't also match src/app/services/media/
+/uploads/
+/media/
+
+# Eval tenant state (contains a live API key) and run reports
+eval/seed/.eval_state.json
+eval/rag/results/
+
+.tmp_activation_password.json
+.tmp_activation_password.jsonl
