@@ -1,0 +1,110 @@
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, EmailStr
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class SuperadminLoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class VerifyActivationRequest(BaseModel):
+    """Step 1 of activation: prove you're the invited tenant via the email
+    the invite was sent to, plus the raw invite token. Stateless check --
+    no side effects, safe to call repeatedly (e.g. for inline form
+    validation before showing the credentials step)."""
+
+    email: EmailStr
+    token: str
+
+
+class CompleteActivationRequest(BaseModel):
+    """Step 2 of activation: resubmit the same invite token from step 1 --
+    the frontend already holds it from the original activation link, so
+    this isn't the user re-entering anything -- plus the username/password
+    to actually create the dashboard login. Email isn't needed again here:
+    the raw token alone (an unguessable secret) is enough to identify and
+    authorize this; the email check in step 1 was just an extra identity
+    confirmation for that step, not a security requirement.
+
+    That login is what tenants use for all subsequent logins via
+    POST /auth/tenant/login."""
+
+    token: str
+    username: str
+    password: str
+
+
+class RequestPasswordResetRequest(BaseModel):
+    username: str
+
+
+class PasswordResetRequest(BaseModel):
+    token: str
+    password: str
+
+
+class TenantRead(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    is_active: bool
+    email: str | None
+    contact_person: str | None
+    contact_number: str | None
+    address: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TenantCreate(BaseModel):
+    name: str
+    slug: str
+    email: EmailStr
+    contact_person: str | None = None
+    contact_number: str | None = None
+    address: str | None = None
+
+
+class TenantUpdate(BaseModel):
+    name: str | None = None
+    email: EmailStr | None = None
+    contact_person: str | None = None
+    contact_number: str | None = None
+    address: str | None = None
+
+
+class TenantListItem(BaseModel):
+    id: uuid.UUID
+    name: str
+    slug: str
+    is_active: bool
+    email: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TenantListResponse(BaseModel):
+    items: list[TenantListItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class TenantDetail(TenantRead):
+    # whether the tenant has completed activation (has a TenantAdmin login)
+    activated: bool
+    admin_username: str | None = None

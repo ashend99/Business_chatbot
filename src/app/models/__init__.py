@@ -1,4 +1,5 @@
 from .admin import TenantAdmin
+from .documents import ContentSource, Document, DocumentChunk, DocumentStatus
 from .tenants import (
     ApiKeyTypes,
     ChannelConnections,
@@ -18,4 +19,8 @@ __all__ = [
     "TenantAdmin",
     "ApiKeyTypes",
     "TenantApiKeys",
+    "Document",
+    "DocumentChunk",
+    "ContentSource",
+    "DocumentStatus",
 ]

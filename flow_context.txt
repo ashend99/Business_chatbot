@@ -1,0 +1,17 @@
+Flow
+Admin dasbhboard
+1. Superadmin login
+2. Collect tenant details and onboard
+3. Create invite token and send a mail including token and tenant dashboard URL
+
+
+
+
+
+
+Issues
+General
+1. 
+
+Admin dashboard
+1. 

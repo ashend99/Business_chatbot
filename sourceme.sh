@@ -8,14 +8,14 @@
 
 set -e
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHONPATH="$PROJECT_DIR/src:$PYTHONPATH"
+PROJECT_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHONPATH="$PROJECT_HOME/src:$PYTHONPATH"
 
-export PROJECT_DIR
-echo "PROJECT_DIR: $PROJECT_DIR"
+export PROJECT_HOME
+echo "PROJECT_HOME: $PROJECT_HOME"
 echo "PYTHONPATH: $PYTHONPATH"
 
-cd "$PROJECT_DIR" || exit
+cd "$PROJECT_HOME" || exit
 
 # Activate virtual environment
 if [ -f ".venv/Scripts/activate" ]; then
