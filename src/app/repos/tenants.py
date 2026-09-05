@@ -7,7 +7,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import generate_raw_token, hash_token
-from app.models import InviteTokens, Tenant, TenantAdmin
+from app.models import InviteTokens, Tenant, TenantAdmin, TenantApiKeys
+from app.repos.tenant_scope import tenant_scope
 from common import PROJECT_CONFIG
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ async def set_tenant_active(session: AsyncSession, tenant_id: uuid.UUID, is_acti
 
 
 async def invalidate_pending_invites(session: AsyncSession, tenant_id: uuid.UUID) -> None:
-    stmt = select(InviteTokens).where(InviteTokens.tenant_id == tenant_id, InviteTokens.is_used.is_(False))
+    stmt = select(InviteTokens).where(tenant_scope(InviteTokens.tenant_id, tenant_id), InviteTokens.is_used.is_(False))
     invites = (await session.execute(stmt)).scalars().all()
     for invite in invites:
         invite.is_used = True
@@ -143,3 +144,8 @@ async def mark_invite_used(session: AsyncSession, invite: InviteTokens) -> None:
 
 def is_invite_valid(invite: InviteTokens) -> bool:
     return not invite.is_used and invite.expires_at > datetime.now(timezone.utc)
+
+
+async def get_api_key_by_hash(session: AsyncSession, hashed_secret: str) -> TenantApiKeys | None:
+    stmt = select(TenantApiKeys).where(TenantApiKeys.hashed_secret == hashed_secret)
+    return (await session.execute(stmt)).scalar_one_or_none()

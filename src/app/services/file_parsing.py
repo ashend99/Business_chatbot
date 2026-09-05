@@ -12,6 +12,11 @@ from bs4 import BeautifulSoup
 from docx import Document as DocxDocument
 from pypdf import PdfReader
 
+from common import PROJECT_CONFIG
+
+_url_import_config = PROJECT_CONFIG.get("documents", {}).get("url_import", {})
+URL_FETCH_TIMEOUT_SECONDS = _url_import_config.get("timeout_seconds", 15)
+
 
 def parse_pdf(data: bytes) -> str:
     reader = PdfReader(BytesIO(data))
@@ -36,7 +41,7 @@ async def fetch_url_text(url: str) -> str:
     collapse whitespace) -- no readability-style main-content detection,
     per the Phase 2 plan.
     """
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=URL_FETCH_TIMEOUT_SECONDS, follow_redirects=True) as client:
         response = await client.get(url)
         response.raise_for_status()
 

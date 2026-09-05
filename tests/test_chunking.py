@@ -38,9 +38,10 @@ def test_overlap_carries_tail_of_previous_chunk_into_the_next():
     assert tail_of_first.strip() in chunks[1]
 
 
-def test_single_oversized_paragraph_is_split_by_sentence():
+def test_single_oversized_paragraph_still_respects_target_size():
     # one paragraph with many sentences, no blank lines at all -- forces the
-    # sentence-splitting branch rather than the paragraph-splitting one
+    # splitter down its fallback separator hierarchy (word/character level)
+    # rather than splitting on blank lines
     paragraph = "Sentence number {}. ".format
     text = "".join(paragraph(i) for i in range(200))
 

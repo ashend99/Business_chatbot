@@ -3,7 +3,6 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
 from app.core.deps import get_current_tenant_id
 from app.db.session import get_db_session
 from app.models.documents import ContentSource, DocumentStatus
@@ -18,6 +17,7 @@ from app.schemas.documents import (
 )
 from app.services import file_parsing
 from app.services.publishing import PublishError, publish_document, retry_publish
+from common import PROJECT_CONFIG
 
 router = APIRouter(prefix="/tenant/documents", tags=["documents"])
 
@@ -27,6 +27,10 @@ _PARSERS = {
     "txt": file_parsing.parse_txt,
 }
 
+_upload_config = PROJECT_CONFIG.get("documents", {}).get("upload", {})
+MAX_DOCUMENT_CHARS = _upload_config.get("max_characters", 200_000)
+MAX_DOCUMENT_UPLOAD_MB = _upload_config.get("max_size_mb", 10)
+
 
 def _extension_of(filename: str | None) -> str:
     if not filename or "." not in filename:
@@ -35,10 +39,10 @@ def _extension_of(filename: str | None) -> str:
 
 
 def _enforce_char_limit(text: str) -> str:
-    if len(text) > settings.max_document_chars:
+    if len(text) > MAX_DOCUMENT_CHARS:
         raise HTTPException(
             status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            f"extracted content exceeds the {settings.max_document_chars}-character limit",
+            f"extracted content exceeds the {MAX_DOCUMENT_CHARS}-character limit",
         )
     return text
 
@@ -134,10 +138,10 @@ async def upload_document(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "unsupported file type -- use PDF, DOCX, or TXT")
 
     data = await file.read()
-    max_bytes = settings.max_document_upload_mb * 1024 * 1024
+    max_bytes = MAX_DOCUMENT_UPLOAD_MB * 1024 * 1024
     if len(data) > max_bytes:
         raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, f"file exceeds the {settings.max_document_upload_mb}MB limit"
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, f"file exceeds the {MAX_DOCUMENT_UPLOAD_MB}MB limit"
         )
 
     try:

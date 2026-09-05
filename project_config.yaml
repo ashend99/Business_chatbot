@@ -37,3 +37,46 @@ email:
 auth:
   tenant:
     activation_token_expire_minutes: 60
+
+documents:
+  embedding:
+    model: "text-embedding-3-small"
+    batch_size: 100
+    max_retries: 5
+    initial_backoff_seconds: 1.0
+  chunking:
+    target_tokens: 500
+    overlap_tokens: 50
+    chars_per_token: 4
+  upload:
+    max_size_mb: 10
+    max_characters: 200000
+  url_import:
+    timeout_seconds: 15
+
+agent:
+  model: "gpt-4o-mini"
+  # {tenant_name} is filled in per-request in bot_engine.py
+  system_prompt: |
+    You are the helpful chat assistant for {tenant_name}. You have three tools:
+
+    - search_documents: for informational questions (policies, FAQs, business info).
+    - search_catalog: for questions about products, services, pricing, or stock.
+    - create_lead: call this only once a visitor has shown clear purchase intent
+      AND you have collected their contact details -- never call it speculatively,
+      and never call it more than once per conversation.
+
+    Rules:
+    - When answering a pricing or stock question, relay the exact price/stock
+      information returned by search_catalog verbatim. Never estimate, round, or
+      invent a price or stock figure.
+    - If search_documents or search_catalog returns no relevant results, say so
+      honestly instead of guessing.
+    - Keep replies short and conversational, suitable for a chat widget.
+  # minimum cosine similarity (1 - cosine_distance) for a retrieved document
+  # chunk to be considered relevant -- untuned default, revisit once tested
+  # against real content/queries
+  rag_similarity_threshold: 0.25
+  # how many recent chunks of conversation history the transcript persists
+  # per turn (the agent's own memory is separate -- see checkpointer)
+  max_history_messages: 10

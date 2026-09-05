@@ -6,14 +6,17 @@ import logging
 from openai import AsyncOpenAI, RateLimitError
 
 from app.core.config import settings
+from common import PROJECT_CONFIG
 
 logger = logging.getLogger(__name__)
 
 _client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-BATCH_SIZE = 100
-MAX_RETRIES = 5
-INITIAL_BACKOFF_SECONDS = 1.0
+_embedding_config = PROJECT_CONFIG.get("documents", {}).get("embedding", {})
+EMBEDDING_MODEL = _embedding_config.get("model", "text-embedding-3-small")
+BATCH_SIZE = _embedding_config.get("batch_size", 100)
+MAX_RETRIES = _embedding_config.get("max_retries", 5)
+INITIAL_BACKOFF_SECONDS = _embedding_config.get("initial_backoff_seconds", 1.0)
 
 
 async def embed_texts(texts: list[str]) -> list[list[float]]:
@@ -34,7 +37,7 @@ async def _embed_batch(batch: list[str]) -> list[list[float]]:
     delay = INITIAL_BACKOFF_SECONDS
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            response = await _client.embeddings.create(model=settings.openai_embedding_model, input=batch)
+            response = await _client.embeddings.create(model=EMBEDDING_MODEL, input=batch)
             return [item.embedding for item in response.data]
         except RateLimitError:
             if attempt == MAX_RETRIES:

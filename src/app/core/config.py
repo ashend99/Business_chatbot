@@ -26,12 +26,15 @@ class Settings(BaseSettings):
     smtp_from: str = "no-reply@example.com"
     smtp_use_tls: bool = True
 
-    # documents module (Phase 2) -- embeddings + upload bounds
+    # documents module (Phase 2) -- secret + schema-pinned values stay here;
+    # everything else (embedding model, batch/retry tuning, chunking sizes,
+    # upload limits) lives in project_config.yaml (see PROJECT_CONFIG)
     openai_api_key: str = "CHANGE_ME"
-    openai_embedding_model: str = "text-embedding-3-small"
+    # must match the pgvector column width set at migration time
+    # (database/alembic/versions/e6b32ddcbecb_add_documents_module.py) --
+    # not freely tunable via project_config.yaml since changing it without a
+    # matching migration would break embedding inserts
     embedding_dimensions: int = 1536
-    max_document_upload_mb: int = 10
-    max_document_chars: int = 200_000
 
 
 @lru_cache

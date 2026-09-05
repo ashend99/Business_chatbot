@@ -5,6 +5,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.documents import ContentSource, Document, DocumentChunk, DocumentStatus
+from app.repos.tenant_scope import tenant_scope
 
 
 async def create_document(
@@ -31,7 +32,7 @@ async def create_document(
 
 
 async def get_document(session: AsyncSession, tenant_id: uuid.UUID, document_id: uuid.UUID) -> Document | None:
-    stmt = select(Document).where(Document.id == document_id, Document.tenant_id == tenant_id)
+    stmt = select(Document).where(Document.id == document_id, tenant_scope(Document.tenant_id, tenant_id))
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
@@ -44,8 +45,8 @@ async def list_documents(
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[Document], int]:
-    stmt = select(Document).where(Document.tenant_id == tenant_id)
-    count_stmt = select(func.count()).select_from(Document).where(Document.tenant_id == tenant_id)
+    stmt = select(Document).where(tenant_scope(Document.tenant_id, tenant_id))
+    count_stmt = select(func.count()).select_from(Document).where(tenant_scope(Document.tenant_id, tenant_id))
     if status is not None:
         stmt = stmt.where(Document.status == status)
         count_stmt = count_stmt.where(Document.status == status)
@@ -155,7 +156,7 @@ async def activate_chunks_and_retire_old(
     await session.execute(
         delete(DocumentChunk).where(
             DocumentChunk.document_id == document_id,
-            DocumentChunk.tenant_id == tenant_id,
+            tenant_scope(DocumentChunk.tenant_id, tenant_id),
             DocumentChunk.id.notin_(new_chunk_ids),
         )
     )
@@ -186,7 +187,7 @@ async def search_similar_chunks(
         select(DocumentChunk)
         .join(Document, Document.id == DocumentChunk.document_id)
         .where(
-            DocumentChunk.tenant_id == tenant_id,
+            tenant_scope(DocumentChunk.tenant_id, tenant_id),
             DocumentChunk.is_active.is_(True),
             Document.status == DocumentStatus.ACTIVE,
         )
@@ -194,3 +195,28 @@ async def search_similar_chunks(
         .limit(k)
     )
     return list((await session.execute(stmt)).scalars().all())
+
+
+async def search_similar_chunks_with_scores(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    query_embedding: list[float],
+    k: int = 5,
+) -> list[tuple[DocumentChunk, float]]:
+    """Same as search_similar_chunks, but also returns each chunk's cosine
+    distance (0 = identical, 2 = opposite) -- used by the bot's
+    search_documents tool to apply a relevance threshold instead of always
+    returning its top-k regardless of how weak the match is."""
+    distance = DocumentChunk.embedding.cosine_distance(query_embedding)
+    stmt = (
+        select(DocumentChunk, distance.label("distance"))
+        .join(Document, Document.id == DocumentChunk.document_id)
+        .where(
+            tenant_scope(DocumentChunk.tenant_id, tenant_id),
+            DocumentChunk.is_active.is_(True),
+            Document.status == DocumentStatus.ACTIVE,
+        )
+        .order_by(distance)
+        .limit(k)
+    )
+    return [(chunk, dist) for chunk, dist in (await session.execute(stmt)).all()]

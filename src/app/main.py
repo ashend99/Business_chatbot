@@ -1,12 +1,20 @@
 import asyncio
 import sys
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg import AsyncConnection
+from psycopg.rows import dict_row
 
 from app.api.auth.router import router as auth_router
+from app.api.bot.router import router as bot_router
 from app.api.superadmin.auth import router as superadmin_auth_router
 from app.api.superadmin.tenants import router as superadmin_tenants_router
+from app.api.tenant.catalog import router as tenant_catalog_router
 from app.api.tenant.documents import router as tenant_documents_router
+from app.core.config import settings
 from common import configure_logging
 
 # must run before uvicorn starts serving requests -- see
@@ -26,19 +34,46 @@ tags_metadata = [
     {"name": "auth", "description": "Tenant login, invite activation, and password reset."},
     {"name": "superadmin", "description": "Platform admin login and tenant onboarding/management."},
     {"name": "documents", "description": "Tenant document ingestion: draft/publish lifecycle, chunk+embed pipeline."},
+    {"name": "catalog", "description": "Tenant category tree, products, and variants (structured, always-accurate pricing/stock)."},
+    {"name": "bot", "description": "Internal service endpoint -- the LangGraph agent, called by n8n/the widget backend."},
 ]
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    # AsyncPostgresSaver wants a plain psycopg conn string, not SQLAlchemy's
+    # dialect-prefixed one -- its checkpoint tables are separate from (and
+    # not managed by) our own Alembic migrations.
+    conn_string = settings.database_url.replace("postgresql+psycopg://", "postgresql://")
+    # Built manually rather than via AsyncPostgresSaver.from_conn_string,
+    # which hardcodes prepare_threshold=0 (prepare every statement
+    # immediately) -- the wrong choice against a pgbouncer/Supavisor
+    # transaction-mode pooler, where a statement prepared on one backend
+    # connection can vanish on the next transaction's connection. See
+    # db/session.py's comment for the full explanation.
+    async with await AsyncConnection.connect(
+        conn_string, autocommit=True, prepare_threshold=None, row_factory=dict_row
+    ) as conn:
+        checkpointer = AsyncPostgresSaver(conn=conn)
+        await checkpointer.setup()
+        app.state.checkpointer = checkpointer
+        yield
+
 
 app = FastAPI(
     title="Business Chatbot Platform",
     description="RAG-powered chatbot platform API -- tenant dashboard, superadmin, and bot endpoints.",
     version="0.1.0",
     openapi_tags=tags_metadata,
+    lifespan=lifespan,
 )
 
 app.include_router(auth_router)
 app.include_router(superadmin_auth_router)
 app.include_router(superadmin_tenants_router)
 app.include_router(tenant_documents_router)
+app.include_router(tenant_catalog_router)
+app.include_router(bot_router)
 
 if __name__ == "__main__":
     import uvicorn
