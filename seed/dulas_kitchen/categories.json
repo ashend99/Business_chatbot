@@ -1,0 +1,13 @@
+[
+  {"key": "appetizers", "name": "Appetizers", "parent_key": null, "sort_order": 1},
+  {"key": "soups", "name": "Soups", "parent_key": null, "sort_order": 2},
+  {"key": "main-course", "name": "Main Course", "parent_key": null, "sort_order": 3},
+  {"key": "rice-noodles", "name": "Rice & Noodles", "parent_key": "main-course", "sort_order": 1},
+  {"key": "curries", "name": "Curries", "parent_key": "main-course", "sort_order": 2},
+  {"key": "grills-bbq", "name": "Grills & BBQ", "parent_key": "main-course", "sort_order": 3},
+  {"key": "beverages", "name": "Beverages", "parent_key": null, "sort_order": 4},
+  {"key": "soft-drinks", "name": "Soft Drinks", "parent_key": "beverages", "sort_order": 1},
+  {"key": "fresh-juices", "name": "Fresh Juices", "parent_key": "beverages", "sort_order": 2},
+  {"key": "mocktails", "name": "Mocktails", "parent_key": "beverages", "sort_order": 3},
+  {"key": "desserts", "name": "Desserts", "parent_key": null, "sort_order": 5}
+]

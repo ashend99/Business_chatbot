@@ -1,0 +1,219 @@
+[
+  {
+    "category_key": "appetizers",
+    "name": "Spring Rolls",
+    "description": "Crispy fried rolls served with sweet chili sauce.",
+    "variants": [
+      {"name": "Vegetable (6 pcs)", "sku": "APP-SPR-VEG", "price": 650.00, "stock_status": "in_stock"},
+      {"name": "Chicken (6 pcs)", "sku": "APP-SPR-CHK", "price": 750.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "appetizers",
+    "name": "Chicken Wings",
+    "description": "Spiced fried wings, 8 pieces per order.",
+    "variants": [
+      {"name": "Regular (8 pcs)", "sku": "APP-WNG-REG", "price": 950.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "appetizers",
+    "name": "Fish Cutlets",
+    "description": "Deep-fried spiced fish and potato cutlets, 6 pieces.",
+    "variants": [
+      {"name": "6 pcs", "sku": "APP-CUT-FSH", "price": 700.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "appetizers",
+    "name": "Devilled Cashews",
+    "description": "Cashew nuts tossed in a spicy devilled sauce with onion and chili.",
+    "variants": [
+      {"name": "Regular", "sku": "APP-CSH-DEV", "price": 550.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "soups",
+    "name": "Chicken Sweet Corn Soup",
+    "variants": [
+      {"name": "Regular", "sku": "SOU-CHK-CRN", "price": 450.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "soups",
+    "name": "Cream of Mushroom Soup",
+    "variants": [
+      {"name": "Regular", "sku": "SOU-MSH-CRM", "price": 480.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "soups",
+    "name": "Seafood Soup",
+    "variants": [
+      {"name": "Regular", "sku": "SOU-SEA-MIX", "price": 650.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "rice-noodles",
+    "name": "Fried Rice",
+    "description": "Wok-tossed rice with egg and vegetables.",
+    "variants": [
+      {"name": "Vegetable", "sku": "RIC-FRD-VEG", "price": 800.00, "stock_status": "in_stock"},
+      {"name": "Egg", "sku": "RIC-FRD-EGG", "price": 850.00, "stock_status": "in_stock"},
+      {"name": "Chicken", "sku": "RIC-FRD-CHK", "price": 950.00, "stock_status": "in_stock"},
+      {"name": "Seafood", "sku": "RIC-FRD-SEA", "price": 1250.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "rice-noodles",
+    "name": "Kottu Roti",
+    "description": "Chopped roti stir-fried with vegetables, egg, and your choice of protein.",
+    "variants": [
+      {"name": "Vegetable", "sku": "KOT-VEG", "price": 850.00, "stock_status": "in_stock"},
+      {"name": "Chicken", "sku": "KOT-CHK", "price": 1050.00, "stock_status": "in_stock"},
+      {"name": "Cheese Chicken", "sku": "KOT-CHK-CHZ", "price": 1250.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "rice-noodles",
+    "name": "Nasi Goreng",
+    "description": "Indonesian-style spiced fried rice with a fried egg on top.",
+    "variants": [
+      {"name": "Regular", "sku": "RIC-NASI", "price": 1100.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "curries",
+    "name": "Chicken Curry",
+    "variants": [
+      {"name": "Regular", "sku": "CUR-CHK", "price": 1050.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "curries",
+    "name": "Fish Curry",
+    "variants": [
+      {"name": "Regular", "sku": "CUR-FSH", "price": 1150.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "curries",
+    "name": "Dhal Curry (Parippu)",
+    "variants": [
+      {"name": "Regular", "sku": "CUR-DHL", "price": 500.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "curries",
+    "name": "Cuttlefish Curry",
+    "variants": [
+      {"name": "Regular", "sku": "CUR-CTL", "price": 1350.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "grills-bbq",
+    "name": "Grilled Chicken",
+    "variants": [
+      {"name": "Half", "sku": "GRL-CHK-HLF", "price": 1450.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "grills-bbq",
+    "name": "BBQ Pork Ribs",
+    "variants": [
+      {"name": "Full Rack", "sku": "GRL-PRK-RIB", "price": 1850.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "grills-bbq",
+    "name": "Grilled Prawns",
+    "variants": [
+      {"name": "6 pcs", "sku": "GRL-PRW", "price": 1950.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "soft-drinks",
+    "name": "Coca-Cola",
+    "variants": [
+      {"name": "330ml", "sku": "BEV-COKE-330", "price": 250.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "soft-drinks",
+    "name": "Sprite",
+    "variants": [
+      {"name": "330ml", "sku": "BEV-SPRT-330", "price": 250.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "soft-drinks",
+    "name": "Ginger Beer",
+    "variants": [
+      {"name": "330ml", "sku": "BEV-GNGR-330", "price": 280.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "fresh-juices",
+    "name": "Watermelon Juice",
+    "variants": [
+      {"name": "Regular", "sku": "JUI-WTRMLN", "price": 400.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "fresh-juices",
+    "name": "Mango Juice",
+    "description": "Seasonal -- made with fresh mango when in season.",
+    "variants": [
+      {
+        "name": "Regular",
+        "sku": "JUI-MANGO",
+        "price": 450.00,
+        "stock_status": "out_of_stock",
+        "stock_message": "Out of season -- back around April"
+      }
+    ]
+  },
+  {
+    "category_key": "fresh-juices",
+    "name": "Lime Juice",
+    "variants": [
+      {"name": "Regular", "sku": "JUI-LIME", "price": 350.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "mocktails",
+    "name": "Virgin Mojito",
+    "variants": [
+      {"name": "Regular", "sku": "MOC-MOJITO", "price": 550.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "mocktails",
+    "name": "Fruit Punch",
+    "variants": [
+      {"name": "Regular", "sku": "MOC-PUNCH", "price": 550.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "desserts",
+    "name": "Watalappan",
+    "description": "Traditional Sri Lankan coconut custard pudding with jaggery and cashews.",
+    "variants": [
+      {"name": "Regular", "sku": "DES-WATA", "price": 400.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "desserts",
+    "name": "Chocolate Lava Cake",
+    "variants": [
+      {"name": "Regular", "sku": "DES-LAVA", "price": 650.00, "stock_status": "in_stock"}
+    ]
+  },
+  {
+    "category_key": "desserts",
+    "name": "Vanilla Ice Cream",
+    "variants": [
+      {"name": "2 Scoops", "sku": "DES-ICE-VAN", "price": 350.00, "stock_status": "in_stock"}
+    ]
+  }
+]

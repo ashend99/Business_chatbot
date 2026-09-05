@@ -1,0 +1,38 @@
+[
+  {
+    "title": "Business Hours & Location",
+    "content_source": "paste",
+    "tags": ["hours", "location", "general"],
+    "draft_content": "Dula's Kitchen is open every day from 5:00 PM to 12:00 AM (midnight).\n\nWe are closed between 12:00 AM and 5:00 PM daily -- no lunch service, dinner and late-night only.\n\nAddress: 24 Galle Road, Colombo 03, Sri Lanka\nPhone: +94 77 123 4567\nEmail: hello@dulaskitchen.lk\n\nParking: Free parking is available in front of the restaurant and along the side street after 6:00 PM.\n\nLast orders for dine-in are taken at 11:30 PM. Last orders for takeaway and our own delivery are taken at 11:15 PM to allow time for preparation and dispatch before closing."
+  },
+  {
+    "title": "Dine-In, Takeaway & Delivery Options",
+    "content_source": "paste",
+    "tags": ["ordering", "dine-in", "takeaway", "delivery"],
+    "draft_content": "Dula's Kitchen offers three ways to enjoy our food:\n\n1. Dine-In\nNo reservation required for parties of 4 or fewer -- walk-ins welcome. For groups of 5 or more, see our Reservations & Group Bookings document. Average wait for a table on weekend nights is 15-20 minutes.\n\n2. Takeaway\nCall +94 77 123 4567 or order in person at the counter. Takeaway orders are usually ready within 20-30 minutes depending on how busy the kitchen is. We'll text you when your order is ready for pickup.\n\n3. Delivery (in-house)\nWe deliver directly within a 5 km radius of the restaurant. Minimum order for delivery is LKR 1,500. Delivery fee is LKR 200 for orders under LKR 3,000, and free for orders LKR 3,000 and above. Typical delivery time is 40-60 minutes depending on distance and order volume.\n\nFor addresses outside our 5 km radius, please order through PickMe Food or Uber Eats instead -- see our Third-Party Delivery Platforms document."
+  },
+  {
+    "title": "Ordering via PickMe Food & Uber Eats",
+    "content_source": "paste",
+    "tags": ["delivery", "pickme", "uber-eats", "third-party"],
+    "draft_content": "Dula's Kitchen is available on both PickMe Food and Uber Eats for customers outside our direct delivery radius, or anyone who simply prefers ordering through those apps.\n\nSearch \"Dula's Kitchen\" on either app. Our menu on these platforms mirrors our in-house menu, though prices may be slightly higher (typically 10-15%) to account for platform commission fees.\n\nOrder tracking, delivery time estimates, and rider contact are all handled through the PickMe or Uber Eats app directly -- our restaurant does not have visibility into rider location. For any issue with a PickMe or Uber Eats order (missing items, wrong order, etc.), please contact that platform's support first, since the order and payment are processed through them, not us directly.\n\nBoth platforms are available during our normal operating hours, 5:00 PM to 12:00 AM. Last order cutoff on these platforms may be slightly earlier than our in-house cutoff (around 11:00 PM) depending on the platform's own policies."
+  },
+  {
+    "title": "Refund & Cancellation Policy",
+    "content_source": "paste",
+    "tags": ["policy", "refund", "cancellation"],
+    "draft_content": "Dine-In: No charge for cancelling a reservation with at least 2 hours' notice. Same-day cancellations under 2 hours are fine for parties of 4 or fewer; groups of 5+ should see our group booking policy.\n\nTakeaway & In-House Delivery: Orders can be cancelled free of charge before the kitchen begins preparation (usually within 5 minutes of placing the order). Once preparation has started, cancellations are not possible, but if there's an issue with order quality on arrival, contact us within 30 minutes of delivery/pickup for a replacement or refund.\n\nPickMe Food & Uber Eats Orders: Cancellations and refunds for orders placed on these platforms are handled entirely by PickMe or Uber Eats according to their own policies. Please use the in-app support/help feature on the respective platform -- we cannot process refunds for orders paid through them.\n\nRefunds for in-house payments (card or cash) are processed within 3-5 business days once approved."
+  },
+  {
+    "title": "Frequently Asked Questions",
+    "content_source": "paste",
+    "tags": ["faq"],
+    "draft_content": "Q: Do you cater to food allergies or dietary restrictions?\nA: Yes. We offer vegetarian and vegan options across most categories, and can adjust spice levels on request. Please inform staff of any allergies (nuts, shellfish, gluten, etc.) when ordering -- while we take precautions, our kitchen handles all these ingredients and cannot guarantee a completely allergen-free environment.\n\nQ: What payment methods do you accept?\nA: Cash, all major credit/debit cards, and popular mobile wallets (FriMi, Genie) for dine-in and takeaway. In-house delivery orders can be paid by card on delivery or online at checkout. PickMe Food and Uber Eats orders are paid through those apps.\n\nQ: Can I customize spice levels?\nA: Yes, all curries and grilled items can be requested mild, medium, or spicy at no extra charge.\n\nQ: Is there a dress code?\nA: No formal dress code, but we ask guests to avoid beachwear/swimwear for dine-in.\n\nQ: Do you have outdoor seating?\nA: Yes, we have a small open-air seating area (12 seats) in addition to indoor air-conditioned seating, weather permitting.\n\nQ: Can I bring my own cake for a celebration?\nA: Yes, outside cakes are welcome for dine-in celebrations. We charge a small cake-cutting fee of LKR 300, plates and cutlery included."
+  },
+  {
+    "title": "Reservations & Group Bookings",
+    "content_source": "paste",
+    "tags": ["reservations", "groups", "dine-in"],
+    "draft_content": "Walk-ins are always welcome for parties of 4 or fewer.\n\nFor groups of 5 or more, we recommend calling ahead at +94 77 123 4567 or emailing hello@dulaskitchen.lk at least 4 hours in advance so we can prepare seating.\n\nGroups of 10 or more require a 50% deposit to confirm the booking, refundable if cancelled at least 24 hours in advance. We offer set banquet menus for large groups on request -- ask our staff for the current banquet menu and pricing.\n\nWe can accommodate birthday and small celebration setups (balloons, a reserved corner table) with 24 hours' notice, subject to availability."
+  }
+]

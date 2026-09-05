@@ -17,6 +17,11 @@ async def get_tenant_by_id(session: AsyncSession, tenant_id: uuid.UUID) -> Tenan
     return await session.get(Tenant, tenant_id)
 
 
+async def get_tenant_by_slug(session: AsyncSession, slug: str) -> Tenant | None:
+    stmt = select(Tenant).where(Tenant.slug == slug)
+    return (await session.execute(stmt)).scalar_one_or_none()
+
+
 async def list_tenants(
     session: AsyncSession,
     *,

@@ -50,7 +50,7 @@ documents:
     chars_per_token: 4
   upload:
     max_size_mb: 10
-    max_characters: 200000
+    max_characters: 20000000
   url_import:
     timeout_seconds: 15
 
