@@ -12,13 +12,12 @@ import uuid
 from langchain_core.tools import StructuredTool
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.components.rag import get_rag
 from app.models.catalog import StockStatus
 from app.models.conversations import ConversationChannel
 from app.models.leads import LeadStatus
 from app.repos import catalog as catalog_repo
-from app.repos import documents as documents_repo
 from app.repos import leads as leads_repo
-from app.services.embeddings import embed_texts
 from common import PROJECT_CONFIG
 
 _agent_config = PROJECT_CONFIG.get("agent", {})
@@ -39,13 +38,21 @@ def _format_variant_line(variant, product) -> str:
 def build_tools(session: AsyncSession, tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: ConversationChannel) -> list[StructuredTool]:
     async def search_documents(query: str) -> str:
         """Search the business's knowledge base (policies, FAQs, general info) for an answer to an informational question."""
-        embeddings = await embed_texts([query])
-        results = await documents_repo.search_similar_chunks_with_scores(session, tenant_id, embeddings[0], k=5)
+        # get_rag().retrieve() embeds the query itself, once -- no separate
+        # embedding call here. Its fused/hybrid ranking score isn't on a
+        # comparable scale to an absolute relevance threshold (RRF is
+        # roughly 0-0.033), so the gate below reads the raw cosine
+        # `dense_distance` retrieve() attaches to each Document's metadata
+        # instead (present only for chunks that came from the dense side).
+        docs = await get_rag().retrieve(query, session=session, tenant_id=tenant_id, top_k=5)
         max_distance = 1 - RAG_SIMILARITY_THRESHOLD
-        relevant = [chunk for chunk, distance in results if distance <= max_distance]
-        if not relevant:
+        is_relevant = any(
+            doc.metadata.get("dense_distance") is not None and doc.metadata["dense_distance"] <= max_distance
+            for doc in docs
+        )
+        if not is_relevant:
             return "No relevant information was found in the knowledge base for this question."
-        return "\n\n---\n\n".join(chunk.content for chunk in relevant)
+        return "\n\n---\n\n".join(doc.content for doc in docs)
 
     async def search_catalog(query: str) -> str:
         """Search the product/service catalog for pricing and stock information."""

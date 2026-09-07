@@ -220,3 +220,22 @@ async def search_similar_chunks_with_scores(
         .limit(k)
     )
     return [(chunk, dist) for chunk, dist in (await session.execute(stmt)).all()]
+
+
+async def list_active_chunks(session: AsyncSession, tenant_id: uuid.UUID, limit: int = 500) -> list[DocumentChunk]:
+    """All active chunks of active documents for a tenant -- used by hybrid
+    retrieval's BM25 side, which needs to score against the whole candidate
+    pool rather than a pre-filtered top-k. Capped at `limit` as a sanity
+    bound; if a tenant's real corpus grows past this, BM25 should move to a
+    persistent index instead of being rebuilt fresh on every query."""
+    stmt = (
+        select(DocumentChunk)
+        .join(Document, Document.id == DocumentChunk.document_id)
+        .where(
+            tenant_scope(DocumentChunk.tenant_id, tenant_id),
+            DocumentChunk.is_active.is_(True),
+            Document.status == DocumentStatus.ACTIVE,
+        )
+        .limit(limit)
+    )
+    return list((await session.execute(stmt)).scalars().all())
