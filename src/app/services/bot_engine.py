@@ -60,7 +60,7 @@ async def handle_message(
     # never replied, not that the user never spoke
     await session.commit()
 
-    tools = build_tools(session, tenant_id, conversation.id, channel_type)
+    tools = build_tools(tenant_id, conversation.id, channel_type)
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(tenant_name=tenant.name if tenant else "this business")
     agent = create_react_agent(_model, tools, checkpointer=checkpointer, prompt=system_prompt)
 
@@ -76,8 +76,12 @@ async def handle_message(
         reply = _apply_pricing_guardrail(reply, _last_tool_output(messages, "search_catalog"))
     except Exception:
         # a bot endpoint failing to generate should still reply with
-        # *something* a channel adapter can forward, not a raw 500
+        # *something* a channel adapter can forward, not a raw 500 -- but
+        # the failure may have left this session's transaction in a broken
+        # state (e.g. a tool-call error), so roll back before reusing it
+        # below, or persisting the fallback message fails too
         logger.exception("agent run failed for conversation %s", conversation.id)
+        await session.rollback()
         reply = FALLBACK_REPLY
 
     await conversations_repo.add_message(session, tenant_id, conversation.id, MessageRole.ASSISTANT, reply)
