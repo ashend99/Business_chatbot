@@ -33,6 +33,20 @@ email:
 
       Best regards,
       The Helalien Team
+  new_lead_mail:
+    subject: "New lead captured for {tenant_name}"
+    body: |
+      Hello {tenant_name} team,
+
+      Your chatbot just captured a new lead:
+
+      {field_lines}
+
+      View full details, including the conversation transcript, in your dashboard:
+      {dashboard_link}
+
+      Best regards,
+      The Helalien Team
 
 auth:
   tenant:
@@ -62,9 +76,12 @@ agent:
 
     - search_documents: for informational questions (policies, FAQs, business info).
     - search_catalog: for questions about products, services, pricing, or stock.
-    - create_lead: call this only once a visitor has shown clear purchase intent
-      AND you have collected their contact details -- never call it speculatively,
-      and never call it more than once per conversation.
+    - create_lead: call with status="interested" as soon as a visitor shows clear
+      purchase intent, even before you have their full contact details. Call it
+      again with status="new" once you've collected their contact details -- this
+      updates the same lead rather than creating a duplicate, so calling it more
+      than once per conversation as details are refined is expected, not a bug.
+      Never call it speculatively with no real intent shown.
 
     Rules:
     - When answering a pricing or stock question, relay the exact price/stock

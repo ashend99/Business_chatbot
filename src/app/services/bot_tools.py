@@ -17,6 +17,7 @@ questions do trigger.
 
 import json
 import uuid
+from typing import Literal
 
 from langchain_core.tools import StructuredTool
 
@@ -27,6 +28,9 @@ from app.models.conversations import ConversationChannel
 from app.models.leads import LeadStatus
 from app.repos import catalog as catalog_repo
 from app.repos import leads as leads_repo
+from app.repos import tenants as tenants_repo
+from app.services.email import get_email_sender
+from app.services.notifications import notify_new_lead
 from common import PROJECT_CONFIG
 
 _agent_config = PROJECT_CONFIG.get("agent", {})
@@ -75,21 +79,33 @@ def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: 
             return "No matching products or services were found in the catalog."
         return "\n".join(_format_variant_line(variant, product) for variant, product, _category in rows)
 
-    async def create_lead(fields: dict, matched_variant_id: str | None = None) -> str:
-        """Record a captured lead once a visitor has shown purchase intent and provided their contact details. `fields` should contain whatever contact/interest details were collected (e.g. name, phone, email). `matched_variant_id` is the `variant_id` shown in a prior search_catalog result for the item they're interested in, if one was found -- omit it if no specific catalog item applies."""
+    async def create_lead(
+        fields: dict, status: Literal["interested", "new"], matched_variant_id: str | None = None
+    ) -> str:
+        """Record or update a captured lead. Call with status="interested" as soon as a visitor shows clear purchase intent, even before you have their full contact details -- and call again with status="new" once you've collected them; this updates the same lead rather than creating a duplicate, so it's safe to call more than once per conversation as details are refined. `fields` should contain whatever contact/interest details were collected so far (e.g. name, phone, email). `matched_variant_id` is the `variant_id` shown in a prior search_catalog result for the item they're interested in, if one was found -- omit it if no specific catalog item applies."""
         variant_uuid = uuid.UUID(matched_variant_id) if matched_variant_id else None
+        lead_status = LeadStatus.NEW if status == "new" else LeadStatus.INTERESTED
+
         async with AsyncSessionLocal() as session:
-            lead = await leads_repo.create_lead_from_bot(
+            lead, became_new = await leads_repo.create_or_update_lead_from_bot(
                 session,
                 tenant_id,
                 conversation_id=conversation_id,
                 matched_variant_id=variant_uuid,
-                status=LeadStatus.NEW,
+                status=lead_status,
                 fields=fields,
                 source_channel=channel_type.value,
             )
             await session.commit()
-        return json.dumps({"lead_id": str(lead.id)})
+
+            # only ever fires once per lead -- became_new is only True on
+            # the specific transition into NEW, not on every call
+            if became_new:
+                tenant = await tenants_repo.get_tenant_by_id(session, tenant_id)
+                if tenant is not None:
+                    await notify_new_lead(get_email_sender(), tenant, lead)
+
+        return json.dumps({"lead_id": str(lead.id), "status": lead.status.value})
 
     return [
         StructuredTool.from_function(coroutine=search_documents, name="search_documents"),

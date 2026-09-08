@@ -2,7 +2,7 @@ from .admin import TenantAdmin
 from .catalog import Category, Product, StockStatus, Variant
 from .conversations import Conversation, ConversationChannel, ConversationStatus, Message, MessageRole
 from .documents import ContentSource, Document, DocumentChunk, DocumentStatus
-from .leads import Lead, LeadStatus
+from .leads import Lead, LeadFieldDef, LeadFieldType, LeadStatus
 from .tenants import (
     ApiKeyTypes,
     ChannelConnections,
@@ -37,4 +37,6 @@ __all__ = [
     "MessageRole",
     "Lead",
     "LeadStatus",
+    "LeadFieldDef",
+    "LeadFieldType",
 ]

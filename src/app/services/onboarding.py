@@ -1,17 +1,17 @@
-import uuid
 import logging
-
-logger = logging.getLogger(__name__)
+import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, hash_token
 from app.models import InviteTokens, Tenant, TenantAdmin
+from app.repos import leads_admin as leads_admin_repo
 from app.repos import tenants as tenants_repo
 from app.services.email import EmailSender
 from common import PROJECT_CONFIG
 from utils import from_env
 
+logger = logging.getLogger(__name__)
 
 RESET_URL_TEMPLATE = "https://dashboard.example.com/reset-password?token={token}"
 
@@ -63,6 +63,10 @@ async def onboard_tenant(
         address=address,
     )
     _invite, raw_token = await tenants_repo.create_invite_token(session, tenant_id=tenant.id)
+    # sensible lead-capture defaults (name/phone/email) so the bot has a
+    # schema to work with immediately -- clients edit/add/remove later via
+    # PUT /tenant/lead-field-defs
+    await leads_admin_repo.seed_default_lead_field_defs(session, tenant.id)
     await session.commit()
 
     mail_subject = PROJECT_CONFIG.email.onboard_mail.subject
