@@ -98,12 +98,12 @@ def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: 
             )
             await session.commit()
 
-            # only ever fires once per lead -- became_new is only True on
-            # the specific transition into NEW, not on every call
-            if became_new:
-                tenant = await tenants_repo.get_tenant_by_id(session, tenant_id)
-                if tenant is not None:
-                    await notify_new_lead(get_email_sender(), tenant, lead)
+            # # only ever fires once per lead -- became_new is only True on
+            # # the specific transition into NEW, not on every call
+            # if became_new:
+            #     tenant = await tenants_repo.get_tenant_by_id(session, tenant_id)
+            #     if tenant is not None:
+            #         await notify_new_lead(get_email_sender(), tenant, lead)
 
         return json.dumps({"lead_id": str(lead.id), "status": lead.status.value})
 
