@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +28,8 @@ async def list_leads(
     status_filter: LeadStatus | None = Query(None, alias="status"),
     matched_variant_id: uuid.UUID | None = None,
     search: str | None = None,
+    created_after: datetime | None = None,
+    created_before: datetime | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
@@ -38,6 +41,8 @@ async def list_leads(
         status=status_filter,
         matched_variant_id=matched_variant_id,
         search=search,
+        created_after=created_after,
+        created_before=created_before,
         page=page,
         page_size=page_size,
     )
