@@ -1,5 +1,5 @@
 from .admin import TenantAdmin
-from .catalog import Category, Product, StockStatus, Variant
+from .catalog import Category, CategoryAttribute, Product, StockStatus, Variant
 from .conversations import Conversation, ConversationChannel, ConversationStatus, Message, MessageRole
 from .documents import ContentSource, Document, DocumentChunk, DocumentStatus
 from .leads import Lead, LeadFieldDef, LeadFieldType, LeadStatus
@@ -27,6 +27,7 @@ __all__ = [
     "ContentSource",
     "DocumentStatus",
     "Category",
+    "CategoryAttribute",
     "Product",
     "Variant",
     "StockStatus",

@@ -35,14 +35,14 @@ export function Field({
   error,
   children,
 }: {
-  label: string;
+  label?: string;
   hint?: string;
   error?: string;
   children: React.ReactNode;
 }) {
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-[12.5px] font-medium text-text-secondary">{label}</span>
+      {label && <span className="text-[12.5px] font-medium text-text-secondary">{label}</span>}
       {children}
       {error ? (
         <span className="text-[11.5px] text-red-600 dark:text-red-400">{error}</span>

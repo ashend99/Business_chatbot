@@ -2,7 +2,9 @@ import uuid
 from decimal import Decimal
 from enum import Enum
 
-from sqlalchemy import Boolean, Enum as SAEnum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, TenantScopedMixin
@@ -23,6 +25,26 @@ class Category(TenantScopedMixin, Base):
         ForeignKey("categories.id", ondelete="SET NULL"), nullable=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class CategoryAttribute(TenantScopedMixin, Base):
+    """A reusable variant-building block attached to a category -- e.g.
+    "Pizza" defining a "Size" attribute with choices [Small, Medium, Large].
+    Every product placed in this category (or a descendant category) can
+    offer this attribute when generating its variants; see
+    repos/catalog.py's get_effective_attributes for the inheritance walk.
+    This is the whole reuse mechanism -- deliberately no separate
+    "product template" entity, since the category tree already gives every
+    product a natural place to inherit from."""
+
+    __tablename__ = "category_attributes"
+
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("categories.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    choices: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
@@ -57,3 +79,8 @@ class Variant(TenantScopedMixin, Base):
     # custom message shown when out of stock, e.g. "back in 2 weeks"
     stock_message: Mapped[str | None] = mapped_column(String(500), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Which attribute choice this variant represents, e.g. {"Size": "Large"}
+    # -- display-only provenance from the category-attribute picker; `name`
+    # stays the source of truth everywhere else (bot search, lead matching).
+    # Manually-added variants simply leave this null.
+    attribute_values: Mapped[dict[str, str] | None] = mapped_column(JSONB, nullable=True)

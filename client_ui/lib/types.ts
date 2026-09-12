@@ -69,3 +69,86 @@ export interface LeadUpdate {
   notes?: string | null;
   deal_value?: string | null;
 }
+
+// ---- Catalog ----------------------------------------------------------
+
+export type StockStatus = "in_stock" | "out_of_stock" | "unlimited";
+
+export interface Category {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  sort_order: number;
+}
+
+export interface CategoryTreeNode {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  sort_order: number;
+  children: CategoryTreeNode[];
+}
+
+export interface Variant {
+  id: string;
+  product_id: string;
+  name: string;
+  sku: string | null;
+  price: string;
+  stock_status: StockStatus;
+  stock_qty: number | null;
+  stock_message: string | null;
+  active: boolean;
+  /** Which attribute choice this variant represents, e.g. {"Size": "Large"} — display-only. */
+  attribute_values: Record<string, string> | null;
+}
+
+/** A reusable variant-building block defined on a category, e.g. "Pizza" -> Size: [Small, Medium, Large]. */
+export interface CategoryAttribute {
+  id: string;
+  category_id: string;
+  name: string;
+  choices: string[];
+  sort_order: number;
+}
+
+export interface CategoryAttributeInput {
+  name: string;
+  choices: string[];
+  sort_order?: number;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  category_id: string | null;
+  description: string | null;
+  image_url: string | null;
+}
+
+export interface ProductWithVariants extends Product {
+  variants: Variant[];
+}
+
+export interface VariantInput {
+  name: string;
+  sku?: string | null;
+  price: string;
+  stock_status?: StockStatus;
+  stock_qty?: number | null;
+  stock_message?: string | null;
+  attribute_values?: Record<string, string> | null;
+}
+
+export interface ProductCreate {
+  name: string;
+  category_id?: string | null;
+  description?: string | null;
+  image_url?: string | null;
+  variants?: VariantInput[];
+  price?: string;
+  sku?: string | null;
+  stock_status?: StockStatus;
+  stock_qty?: number | null;
+  stock_message?: string | null;
+}

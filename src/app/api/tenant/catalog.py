@@ -7,12 +7,14 @@ from app.core.deps import get_current_tenant_id
 from app.db.session import get_db_session
 from app.repos import catalog as catalog_repo
 from app.schemas.catalog import (
+    CatalogSearchResult,
+    CategoryAttributeRead,
+    CategoryAttributesReplaceRequest,
     CategoryCreate,
     CategoryRead,
     CategoryReparentRequest,
     CategoryTreeNode,
     CategoryUpdate,
-    CatalogSearchResult,
     ProductCreate,
     ProductRead,
     ProductUpdate,
@@ -112,6 +114,55 @@ async def delete_category(
     if not deleted:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "category not found")
     await session.commit()
+
+
+# ---- category attributes ---------------------------------------------------
+# The reusable variant-building blocks a category offers (e.g. "Pizza" ->
+# Size: [Small, Medium, Large]) -- see repos/catalog.py for the inheritance
+# rule (a subcategory inherits its ancestors' attributes, overriding by name).
+
+
+@router.get("/categories/{category_id}/attributes", response_model=list[CategoryAttributeRead])
+async def list_category_attributes(
+    category_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[CategoryAttributeRead]:
+    if await catalog_repo.get_category(session, tenant_id, category_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "category not found")
+    attrs = await catalog_repo.list_category_attributes(session, tenant_id, category_id)
+    return [CategoryAttributeRead.model_validate(a) for a in attrs]
+
+
+@router.put("/categories/{category_id}/attributes", response_model=list[CategoryAttributeRead])
+async def replace_category_attributes(
+    category_id: uuid.UUID,
+    payload: CategoryAttributesReplaceRequest,
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[CategoryAttributeRead]:
+    if await catalog_repo.get_category(session, tenant_id, category_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "category not found")
+    attrs = await catalog_repo.replace_category_attributes(
+        session, tenant_id, category_id, [a.model_dump() for a in payload.attributes]
+    )
+    await session.commit()
+    return [CategoryAttributeRead.model_validate(a) for a in attrs]
+
+
+@router.get("/categories/{category_id}/effective-attributes", response_model=list[CategoryAttributeRead])
+async def get_effective_attributes(
+    category_id: uuid.UUID,
+    tenant_id: uuid.UUID = Depends(get_current_tenant_id),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[CategoryAttributeRead]:
+    """This category's own attributes plus everything inherited from its
+    ancestors -- what the "add product" flow uses to build the
+    checkbox-driven variant generator."""
+    if await catalog_repo.get_category(session, tenant_id, category_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "category not found")
+    attrs = await catalog_repo.get_effective_attributes(session, tenant_id, category_id)
+    return [CategoryAttributeRead.model_validate(a) for a in attrs]
 
 
 # ---- products -------------------------------------------------------------

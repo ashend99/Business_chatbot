@@ -4,7 +4,7 @@ from decimal import Decimal
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.catalog import Category, Product, StockStatus, Variant
+from app.models.catalog import Category, CategoryAttribute, Product, StockStatus, Variant
 from app.repos.tenant_scope import tenant_scope
 
 # ---- categories ------------------------------------------------------
@@ -101,6 +101,90 @@ async def get_category_tree(session: AsyncSession, tenant_id: uuid.UUID) -> list
     return roots
 
 
+# ---- category attributes -----------------------------------------------
+# The reusable "variant-building blocks" a category offers, e.g. "Pizza"
+# defining Size -> [Small, Medium, Large]. See get_effective_attributes for
+# how a product's category inherits these up the tree.
+
+
+async def list_category_attributes(
+    session: AsyncSession, tenant_id: uuid.UUID, category_id: uuid.UUID
+) -> list[CategoryAttribute]:
+    """This category's own attribute definitions only (not inherited) --
+    what the "manage attributes" editor reads and replaces."""
+    stmt = (
+        select(CategoryAttribute)
+        .where(tenant_scope(CategoryAttribute.tenant_id, tenant_id), CategoryAttribute.category_id == category_id)
+        .order_by(CategoryAttribute.sort_order, CategoryAttribute.name)
+    )
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def replace_category_attributes(
+    session: AsyncSession, tenant_id: uuid.UUID, category_id: uuid.UUID, attributes: list[dict]
+) -> list[CategoryAttribute]:
+    """Full replace (PUT semantics), same pattern as leads_admin's
+    replace_lead_field_defs -- a category's attribute list is small and
+    edited rarely, so delete-all-then-recreate is simpler than diff/merge."""
+    existing = await list_category_attributes(session, tenant_id, category_id)
+    for row in existing:
+        await session.delete(row)
+    await session.flush()
+
+    rows = [
+        CategoryAttribute(
+            tenant_id=tenant_id,
+            category_id=category_id,
+            name=a["name"],
+            choices=a["choices"],
+            sort_order=a.get("sort_order", i),
+        )
+        for i, a in enumerate(attributes)
+    ]
+    session.add_all(rows)
+    await session.flush()
+    return rows
+
+
+async def get_effective_attributes(
+    session: AsyncSession, tenant_id: uuid.UUID, category_id: uuid.UUID
+) -> list[CategoryAttribute]:
+    """This category's own attributes plus everything inherited from its
+    ancestors, walking up parent_id. On a name collision the definition
+    closest to `category_id` wins (a subcategory can override, not just
+    add to, an inherited attribute). Two queries regardless of tree depth:
+    all categories once (to build the parent chain in Python, avoiding a
+    round trip per level), then one attribute fetch across that whole chain."""
+    categories = await list_categories(session, tenant_id)
+    parent_by_id = {c.id: c.parent_id for c in categories}
+    if category_id not in parent_by_id:
+        return []
+
+    chain: list[uuid.UUID] = []
+    current: uuid.UUID | None = category_id
+    seen: set[uuid.UUID] = set()
+    while current is not None and current not in seen:
+        seen.add(current)
+        chain.append(current)
+        current = parent_by_id.get(current)
+
+    stmt = select(CategoryAttribute).where(
+        tenant_scope(CategoryAttribute.tenant_id, tenant_id), CategoryAttribute.category_id.in_(chain)
+    )
+    rows = (await session.execute(stmt)).scalars().all()
+    by_category: dict[uuid.UUID, list[CategoryAttribute]] = {}
+    for attr in rows:
+        by_category.setdefault(attr.category_id, []).append(attr)
+
+    # chain runs most-specific (the category itself) -> least-specific (root);
+    # dict.setdefault keeps the first write, i.e. the closest definition.
+    by_name: dict[str, CategoryAttribute] = {}
+    for cid in chain:
+        for attr in sorted(by_category.get(cid, []), key=lambda a: a.sort_order):
+            by_name.setdefault(attr.name, attr)
+    return list(by_name.values())
+
+
 # ---- products / variants ----------------------------------------------
 
 
@@ -132,6 +216,7 @@ async def create_product(
             stock_status=spec.get("stock_status", StockStatus.IN_STOCK),
             stock_qty=spec.get("stock_qty"),
             stock_message=spec.get("stock_message"),
+            attribute_values=spec.get("attribute_values"),
         )
         session.add(variant)
     await session.flush()
@@ -192,6 +277,7 @@ async def add_variant(
     stock_status: StockStatus = StockStatus.IN_STOCK,
     stock_qty: int | None = None,
     stock_message: str | None = None,
+    attribute_values: dict[str, str] | None = None,
 ) -> Variant:
     variant = Variant(
         tenant_id=tenant_id,
@@ -202,6 +288,7 @@ async def add_variant(
         stock_status=stock_status,
         stock_qty=stock_qty,
         stock_message=stock_message,
+        attribute_values=attribute_values,
     )
     session.add(variant)
     await session.flush()
