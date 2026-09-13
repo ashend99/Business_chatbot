@@ -1,4 +1,4 @@
-import type { LeadStatus } from "@/lib/types";
+import type { DocumentStatus, LeadStatus } from "@/lib/types";
 
 const LEAD_STATUS_STYLES: Record<LeadStatus, string> = {
   interested:
@@ -52,4 +52,17 @@ export function Badge({
       {children}
     </span>
   );
+}
+
+const DOCUMENT_STATUS: Record<DocumentStatus, { label: string; tone: Tone }> = {
+  draft: { label: "Draft", tone: "neutral" },
+  processing: { label: "Processing", tone: "warning" },
+  active: { label: "Published", tone: "positive" },
+  failed: { label: "Failed", tone: "danger" },
+  inactive: { label: "Inactive", tone: "neutral" },
+};
+
+export function DocumentStatusBadge({ status }: { status: DocumentStatus }) {
+  const { label, tone } = DOCUMENT_STATUS[status];
+  return <Badge tone={tone}>{label}</Badge>;
 }

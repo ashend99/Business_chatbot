@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { CategoryAttributesModal } from "@/components/catalog/CategoryAttributesModal";
 import { CatalogIcon, ChevronDownIcon, MoreIcon, PlusIcon } from "@/components/icons";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { flattenTree } from "@/lib/catalog-tree";
 import type { CategoryTreeNode, Product } from "@/lib/types";
 
@@ -149,6 +150,7 @@ function CategoryNode({
   onManageAttributes: (node: CategoryTreeNode) => void;
   setError: (msg: string | null) => void;
 }) {
+  const confirm = useConfirm();
   const [expanded, setExpanded] = useState(true);
   const [mode, setMode] = useState<Mode>("view");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -263,9 +265,15 @@ function CategoryNode({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       setMenuOpen(false);
-                      if (!confirm(`Delete "${node.name}"?`)) return;
+                      const ok = await confirm({
+                        title: "Delete category",
+                        message: `Delete "${node.name}"? Its products aren't deleted, but become uncategorized.`,
+                        confirmLabel: "Delete",
+                        danger: true,
+                      });
+                      if (!ok) return;
                       run(() => apiCall(`/api/tenant/categories/${node.id}`, "DELETE"));
                     }}
                     className="block w-full rounded px-2 py-1.5 text-left text-[12.5px] text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"

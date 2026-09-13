@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 import { ThemeProvider, themeBootstrapScript } from "@/lib/theme";
 import "./globals.css";
 
@@ -21,7 +22,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Script id="theme-bootstrap" strategy="beforeInteractive">
           {themeBootstrapScript}
         </Script>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

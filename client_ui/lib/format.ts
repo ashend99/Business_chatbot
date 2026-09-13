@@ -25,6 +25,24 @@ export function formatDateTime(iso: string): string {
   });
 }
 
+/** ISO timestamp -> the value an `<input type="datetime-local">` expects
+ * (local time, no timezone suffix, minute precision). */
+export function toDateTimeInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** The reverse: a datetime-local value (parsed by the browser as local
+ * time) -> a UTC ISO timestamp for the API. */
+export function fromDateTimeInput(value: string): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 export function formatMoney(value: string | null): string {
   if (value == null || value === "") return "—";
   const n = Number(value);

@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { PencilIcon, TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Input, Select } from "@/components/ui/Field";
 import { formatMoney } from "@/lib/format";
 import type { StockStatus, Variant } from "@/lib/types";
@@ -47,6 +48,7 @@ export function VariantRow({
   onChange: (v: Variant) => void;
   onDelete: (id: string) => void;
 }) {
+  const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(variant.name);
   const [sku, setSku] = useState(variant.sku ?? "");
@@ -86,7 +88,13 @@ export function VariantRow({
   }
 
   async function remove() {
-    if (!confirm(`Delete variant "${variant.name}"?`)) return;
+    const ok = await confirm({
+      title: "Delete variant",
+      message: `Delete variant "${variant.name}"?`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     try {
       const res = await fetch(`/api/tenant/products/${productId}/variants/${variant.id}`, {
         method: "DELETE",

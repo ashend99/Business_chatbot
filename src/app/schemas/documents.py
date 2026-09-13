@@ -15,6 +15,10 @@ class DocumentCreate(BaseModel):
     content_source: ContentSource = ContentSource.PASTE
     tags: list[str] | None = None
     draft_content: str | None = None
+    # Optional "temporary document" window (e.g. a seasonal offer) -- see
+    # models/documents.py's Document.active_from/active_until.
+    active_from: datetime | None = None
+    active_until: datetime | None = None
 
     # a model-level (not field-level) validator: field_validator would be
     # skipped here because draft_content is often left at its None default,
@@ -33,12 +37,22 @@ class DocumentImportUrlRequest(BaseModel):
     title: str
     url: HttpUrl
     tags: list[str] | None = None
+    active_from: datetime | None = None
+    active_until: datetime | None = None
 
 
 class DocumentUpdate(BaseModel):
+    # title/tags/draft_content: like the rest of this codebase's PATCH
+    # endpoints, leaving one unset keeps it, and an explicit `null` is
+    # currently ignored too (repos/documents.py's update_document_draft
+    # skips None for these). active_from/active_until are the exception --
+    # an explicit `null` there does clear the bound, since "remove the
+    # expiry" is a normal action for a temporary document.
     title: str | None = None
     tags: list[str] | None = None
     draft_content: str | None = None
+    active_from: datetime | None = None
+    active_until: datetime | None = None
 
 
 class DocumentRead(BaseModel):
@@ -50,6 +64,9 @@ class DocumentRead(BaseModel):
     tags: list[str] | None
     status: DocumentStatus
     last_published_at: datetime | None
+    active_from: datetime | None
+    active_until: datetime | None
+    is_expired: bool
     created_at: datetime
     updated_at: datetime
 
@@ -63,6 +80,9 @@ class DocumentListItem(BaseModel):
     tags: list[str] | None
     status: DocumentStatus
     last_published_at: datetime | None
+    active_from: datetime | None
+    active_until: datetime | None
+    is_expired: bool
     updated_at: datetime
 
     model_config = {"from_attributes": True}

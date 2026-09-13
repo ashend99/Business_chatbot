@@ -152,3 +152,54 @@ export interface ProductCreate {
   stock_qty?: number | null;
   stock_message?: string | null;
 }
+
+// ---- Documents / Knowledge base ----------------------------------------
+
+export type DocumentStatus = "draft" | "processing" | "active" | "failed" | "inactive";
+export type ContentSource = "upload" | "paste" | "url";
+
+export interface DocumentListItem {
+  id: string;
+  title: string;
+  content_source: ContentSource;
+  tags: string[] | null;
+  status: DocumentStatus;
+  last_published_at: string | null;
+  /** Optional "temporary document" window, e.g. a seasonal offer. Both null = always active once published. */
+  active_from: string | null;
+  active_until: string | null;
+  /** Computed server-side: true once `active_until` has passed, even if `status` hasn't been swept to inactive yet. */
+  is_expired: boolean;
+  updated_at: string;
+}
+
+export interface DocumentListResponse {
+  items: DocumentListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface DocumentDetail {
+  id: string;
+  title: string;
+  content_source: ContentSource;
+  source_ref: string | null;
+  draft_content: string;
+  tags: string[] | null;
+  status: DocumentStatus;
+  last_published_at: string | null;
+  active_from: string | null;
+  active_until: string | null;
+  is_expired: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DocumentUpdate {
+  title?: string;
+  tags?: string[] | null;
+  draft_content?: string;
+  active_from?: string | null;
+  active_until?: string | null;
+}

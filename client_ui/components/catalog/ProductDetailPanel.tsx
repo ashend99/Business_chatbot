@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { VariantRow } from "@/components/catalog/VariantRow";
 import { PlusIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import { flattenTree } from "@/lib/catalog-tree";
 import type { CategoryTreeNode, ProductWithVariants, StockStatus, Variant } from "@/lib/types";
@@ -117,6 +118,7 @@ export function ProductDetailPanel({
   onDeleted: () => void;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [product, setProduct] = useState<ProductWithVariants | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -183,7 +185,14 @@ export function ProductDetailPanel({
   }
 
   async function deleteProduct() {
-    if (!product || !confirm(`Delete "${product.name}" and all its variants?`)) return;
+    if (!product) return;
+    const ok = await confirm({
+      title: "Delete product",
+      message: `Delete "${product.name}" and all its variants? This can't be undone.`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
     const res = await fetch(`/api/tenant/products/${product.id}`, { method: "DELETE" });
     if (!res.ok) {
       setError((await res.json().catch(() => ({}))).error ?? "Could not delete the product.");

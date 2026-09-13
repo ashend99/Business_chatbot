@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from pgvector.sqlalchemy import Vector
@@ -42,6 +42,18 @@ class Document(TenantScopedMixin, Base):
         SAEnum(DocumentStatus, name="document_status"), default=DocumentStatus.DRAFT, nullable=False
     )
     last_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Optional "temporary document" window -- e.g. a seasonal offer or a
+    # holiday notice. Both null (the default) means always eligible once
+    # published, exactly like before this feature existed. RAG retrieval
+    # (repos/documents.py's search functions) checks this window on every
+    # query, so expiry takes effect immediately without any scheduled job;
+    # `is_expired` below is purely a display convenience for the dashboard.
+    active_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    active_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def is_expired(self) -> bool:
+        return self.active_until is not None and self.active_until < datetime.now(timezone.utc)
 
 
 class DocumentChunk(TenantScopedMixin, Base):

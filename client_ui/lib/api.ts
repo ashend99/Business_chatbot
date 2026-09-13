@@ -28,7 +28,7 @@ export class ApiError extends Error {
 }
 
 type FetchOptions = Omit<RequestInit, "body"> & {
-  /** JSON-serialisable request body. */
+  /** JSON-serialisable request body, or a FormData for a file upload (sent as-is, no Content-Type override so fetch sets its own multipart boundary). */
   body?: unknown;
   /** Explicit bearer token — overrides the cookie (used by route handlers). */
   token?: string;
@@ -36,6 +36,7 @@ type FetchOptions = Omit<RequestInit, "body"> & {
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
   const { body, token: explicitToken, headers, ...rest } = options;
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
 
   let token = explicitToken;
   if (!token) {
@@ -51,11 +52,11 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
     res = await fetch(`${BASE_URL}${path}`, {
       ...rest,
       headers: {
-        "Content-Type": "application/json",
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...headers,
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isFormData ? (body as FormData) : JSON.stringify(body),
       cache: "no-store",
     });
   } catch {
