@@ -1,7 +1,7 @@
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.catalog import Category, CategoryAttribute, Product, StockStatus, Variant
@@ -318,8 +318,20 @@ async def delete_variant(session: AsyncSession, tenant_id: uuid.UUID, variant_id
 async def search_catalog(session: AsyncSession, tenant_id: uuid.UUID, query: str, limit: int = 10) -> list[tuple[Variant, Product, Category | None]]:
     """ILIKE search across variant/product/category name -- used by the
     dashboard search box and (Phase 4) the bot's catalog tool. Only active
-    variants are returned."""
-    pattern = f"%{query}%"
+    variants are returned.
+
+    Tokenized per word (each word must match variant/product/category name
+    individually, not the query as one substring) so natural phrasing like
+    "large chicken pizza" still matches a "Chicken Pizza" product's "Large"
+    variant -- a single `%large chicken pizza%` pattern would never match
+    since no single column contains that exact phrase."""
+    words = [w for w in query.split() if w]
+    if not words:
+        return []
+    word_conditions = [
+        or_(Variant.name.ilike(f"%{word}%"), Product.name.ilike(f"%{word}%"), Category.name.ilike(f"%{word}%"))
+        for word in words
+    ]
     stmt = (
         select(Variant, Product, Category)
         .join(Product, Product.id == Variant.product_id)
@@ -327,7 +339,7 @@ async def search_catalog(session: AsyncSession, tenant_id: uuid.UUID, query: str
         .where(
             tenant_scope(Variant.tenant_id, tenant_id),
             Variant.active.is_(True),
-            or_(Variant.name.ilike(pattern), Product.name.ilike(pattern), Category.name.ilike(pattern)),
+            and_(*word_conditions),
         )
         .order_by(Product.name, Variant.name)
         .limit(limit)

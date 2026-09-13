@@ -70,6 +70,43 @@ export interface LeadUpdate {
   deal_value?: string | null;
 }
 
+// ---- Conversations ------------------------------------------------------
+
+export type ConversationChannel = "website_widget" | "facebook" | "instagram" | "whatsapp";
+export type ConversationStatus = "open" | "idle" | "closed";
+
+export interface ConversationListItem {
+  id: string;
+  channel_type: ConversationChannel;
+  external_user_id: string;
+  status: ConversationStatus;
+  last_message_at: string;
+  last_message_preview: string | null;
+}
+
+export interface ConversationListResponse {
+  items: ConversationListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface MessageRead {
+  id: string;
+  role: MessageRole;
+  content: string;
+  created_at: string;
+}
+
+export interface ConversationDetail {
+  id: string;
+  channel_type: ConversationChannel;
+  external_user_id: string;
+  status: ConversationStatus;
+  last_message_at: string;
+  messages: MessageRead[];
+}
+
 // ---- Catalog ----------------------------------------------------------
 
 export type StockStatus = "in_stock" | "out_of_stock" | "unlimited";

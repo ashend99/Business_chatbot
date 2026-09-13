@@ -9,7 +9,7 @@ imports) must never reach into that module.
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.leads import Lead, LeadStatus
@@ -38,6 +38,18 @@ async def create_or_update_lead_from_bot(
     """
     existing: Lead | None = None
     if conversation_id is not None:
+        # LangGraph's ToolNode runs multiple tool calls from one LLM turn
+        # concurrently via asyncio.gather (see bot_tools.py's build_tools
+        # docstring), and each tool call opens its own session/transaction
+        # -- so two create_lead calls in the same turn (e.g. one
+        # "interested", one "new" once details come in) can otherwise both
+        # find no existing row and both INSERT, producing duplicate leads
+        # for one conversation. A transaction-scoped advisory lock keyed on
+        # conversation_id serializes them: the second call blocks here
+        # until the first commits (releasing the lock), so its SELECT below
+        # then correctly sees the just-inserted row and takes the UPDATE
+        # branch instead.
+        await session.execute(select(func.pg_advisory_xact_lock(func.hashtext(str(conversation_id)))))
         stmt = select(Lead).where(tenant_scope(Lead.tenant_id, tenant_id), Lead.conversation_id == conversation_id)
         existing = (await session.execute(stmt)).scalar_one_or_none()
 
