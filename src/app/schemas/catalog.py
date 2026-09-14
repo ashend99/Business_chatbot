@@ -45,6 +45,11 @@ class VariantCreate(BaseModel):
     stock_status: StockStatus = StockStatus.IN_STOCK
     stock_qty: int | None = None
     stock_message: str | None = None
+    # Which category-attribute choice this variant represents, e.g.
+    # {"Size": "Large"} -- display-only, set when generated from the
+    # "add product from category attributes" flow; null for a manually
+    # added variant.
+    attribute_values: dict[str, str] | None = None
 
 
 class VariantUpdate(BaseModel):
@@ -67,8 +72,29 @@ class VariantRead(BaseModel):
     stock_qty: int | None
     stock_message: str | None
     active: bool
+    attribute_values: dict[str, str] | None
 
     model_config = {"from_attributes": True}
+
+
+class CategoryAttributeCreate(BaseModel):
+    name: str
+    choices: list[str]
+    sort_order: int = 0
+
+
+class CategoryAttributeRead(BaseModel):
+    id: uuid.UUID
+    category_id: uuid.UUID
+    name: str
+    choices: list[str]
+    sort_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class CategoryAttributesReplaceRequest(BaseModel):
+    attributes: list[CategoryAttributeCreate]
 
 
 class ProductCreate(BaseModel):

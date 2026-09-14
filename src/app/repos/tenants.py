@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import generate_raw_token, hash_token
-from app.models import InviteTokens, Tenant, TenantAdmin, TenantApiKeys
+from app.models import ApiKeyTypes, InviteTokens, Tenant, TenantAdmin, TenantApiKeys
 from app.repos.tenant_scope import tenant_scope
 from common import PROJECT_CONFIG
 
@@ -154,3 +154,22 @@ def is_invite_valid(invite: InviteTokens) -> bool:
 async def get_api_key_by_hash(session: AsyncSession, hashed_secret: str) -> TenantApiKeys | None:
     stmt = select(TenantApiKeys).where(TenantApiKeys.hashed_secret == hashed_secret)
     return (await session.execute(stmt)).scalar_one_or_none()
+
+
+async def create_api_key(
+    session: AsyncSession, *, tenant_id: uuid.UUID, key_type: ApiKeyTypes
+) -> tuple[TenantApiKeys, str]:
+    """Mints a new tenant API key -- the raw secret is returned once here and
+    never stored/retrievable again, only its hash + a short prefix (for
+    display) persist. Used for the api_secret key /bot/message callers
+    (n8n, the widget backend) authenticate with via X-Api-Key."""
+    raw_key = generate_raw_token()
+    key = TenantApiKeys(
+        tenant_id=tenant_id,
+        key_prefix=raw_key[:8],
+        hashed_secret=hash_token(raw_key),
+        key_type=key_type,
+    )
+    session.add(key)
+    await session.flush()
+    return key, raw_key

@@ -60,6 +60,8 @@ async def create_document(
         content_source=payload.content_source,
         tags=payload.tags,
         draft_content=payload.draft_content or "",
+        active_from=payload.active_from,
+        active_until=payload.active_until,
     )
     await session.commit()
     return DocumentRead.model_validate(document)
@@ -85,6 +87,8 @@ async def import_url(
         tags=payload.tags,
         draft_content=text,
         source_ref=str(payload.url),
+        active_from=payload.active_from,
+        active_until=payload.active_until,
     )
     await session.commit()
     return DocumentRead.model_validate(document)
@@ -94,13 +98,20 @@ async def import_url(
 async def list_documents(
     status_filter: DocumentStatus | None = Query(None, alias="status"),
     tag: str | None = None,
+    expired: bool = False,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     session: AsyncSession = Depends(get_db_session),
 ) -> DocumentListResponse:
+    # Lazy cleanup: flip any now-expired temporary document to inactive
+    # before listing, so the returned status is never stale. Cheap no-op
+    # when nothing has expired; see sweep_expired_documents's docstring.
+    await documents_repo.sweep_expired_documents(session, tenant_id)
+    await session.commit()
+
     items, total = await documents_repo.list_documents(
-        session, tenant_id, status=status_filter, tag=tag, page=page, page_size=page_size
+        session, tenant_id, status=status_filter, tag=tag, expired_only=expired, page=page, page_size=page_size
     )
     return DocumentListResponse(
         items=[DocumentListItem.model_validate(d) for d in items], total=total, page=page, page_size=page_size
@@ -113,6 +124,9 @@ async def get_document(
     tenant_id: uuid.UUID = Depends(get_current_tenant_id),
     session: AsyncSession = Depends(get_db_session),
 ) -> DocumentRead:
+    await documents_repo.sweep_expired_documents(session, tenant_id)
+    await session.commit()
+
     document = await documents_repo.get_document(session, tenant_id, document_id)
     if document is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "document not found")

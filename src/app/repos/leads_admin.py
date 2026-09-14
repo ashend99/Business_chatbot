@@ -8,6 +8,7 @@ obvious rather than just a comment.
 """
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import Text, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,30 +26,42 @@ async def list_leads(
     status: LeadStatus | None = None,
     matched_variant_id: uuid.UUID | None = None,
     search: str | None = None,
+    created_after: datetime | None = None,
+    created_before: datetime | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[Lead], int]:
-    stmt = select(Lead).where(tenant_scope(Lead.tenant_id, tenant_id))
-    count_stmt = select(func.count()).select_from(Lead).where(tenant_scope(Lead.tenant_id, tenant_id))
+    conditions = [tenant_scope(Lead.tenant_id, tenant_id)]
     if status is not None:
-        stmt = stmt.where(Lead.status == status)
-        count_stmt = count_stmt.where(Lead.status == status)
+        conditions.append(Lead.status == status)
     if matched_variant_id is not None:
-        stmt = stmt.where(Lead.matched_variant_id == matched_variant_id)
-        count_stmt = count_stmt.where(Lead.matched_variant_id == matched_variant_id)
+        conditions.append(Lead.matched_variant_id == matched_variant_id)
+    if created_after is not None:
+        conditions.append(Lead.created_at >= created_after)
+    if created_before is not None:
+        conditions.append(Lead.created_at < created_before)
     if search:
         # fields is free-form JSONB (dynamic per-tenant schema) -- search
         # across its whole serialized text rather than a specific key, so
         # a search box works regardless of which fields a tenant configured
-        pattern = f"%{search}%"
-        condition = cast(Lead.fields, Text).ilike(pattern)
-        stmt = stmt.where(condition)
-        count_stmt = count_stmt.where(condition)
+        conditions.append(cast(Lead.fields, Text).ilike(f"%{search}%"))
 
-    total = (await session.execute(count_stmt)).scalar_one()
-    stmt = stmt.order_by(Lead.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
-    items = (await session.execute(stmt)).scalars().all()
-    return list(items), total
+    # count(*) OVER() gives the full filtered total in the same round trip as
+    # the page of rows -- one query to the (remote) DB instead of two. When
+    # the requested page is past the end there are no rows and total reads 0;
+    # the dashboard's pager never requests such a page.
+    total_col = func.count().over().label("total")
+    stmt = (
+        select(Lead, total_col)
+        .where(*conditions)
+        .order_by(Lead.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = (await session.execute(stmt)).all()
+    if not rows:
+        return [], 0
+    return [row[0] for row in rows], int(rows[0].total)
 
 
 async def get_lead(session: AsyncSession, tenant_id: uuid.UUID, lead_id: uuid.UUID) -> Lead | None:

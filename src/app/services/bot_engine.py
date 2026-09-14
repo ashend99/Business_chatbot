@@ -41,6 +41,13 @@ FALLBACK_REPLY = "Sorry, I'm having trouble responding right now -- please try a
 # matches "$19.99", "$1,299", "$5" -- used by the pricing guardrail below
 _PRICE_PATTERN = re.compile(r"\$\s?\d+(?:,\d{3})*(?:\.\d{1,2})?")
 
+# used by the order-confirmation guardrail below -- catches the LLM telling
+# the customer their order is confirmed/placed in prose without actually
+# having called confirm_order
+_ORDER_CONFIRMED_CLAIM_PATTERN = re.compile(
+    r"\border (?:is |has been )?(?:confirmed|placed)\b|\b(?:confirmed|placed) your order\b", re.IGNORECASE
+)
+
 _model = ChatOpenAI(model=MODEL_NAME, api_key=settings.openai_api_key)
 
 
@@ -73,7 +80,22 @@ async def handle_message(
         messages = result["messages"]
         reply = _last_ai_text(messages)
         actions = _extract_lead_actions(messages)
-        reply = _apply_pricing_guardrail(reply, _last_tool_output(messages, "search_catalog"))
+        # update_order/confirm_order also state trustworthy prices (unit
+        # prices, cart total) computed server-side the same way
+        # search_catalog's are -- combine whichever of the three ran this
+        # turn so the guardrail below checks the reply against all of them.
+        trusted_outputs = [
+            out
+            for out in (
+                _last_tool_output(messages, "search_catalog"),
+                _last_tool_output(messages, "update_order"),
+                _last_tool_output(messages, "confirm_order"),
+            )
+            if out is not None
+        ]
+        combined_trusted_output = "\n".join(trusted_outputs) if trusted_outputs else None
+        reply = _apply_pricing_guardrail(reply, combined_trusted_output)
+        reply = _apply_order_confirmation_guardrail(reply, messages)
     except Exception:
         # a bot endpoint failing to generate should still reply with
         # *something* a channel adapter can forward, not a raw 500 -- but
@@ -134,3 +156,23 @@ def _apply_pricing_guardrail(reply: str, catalog_output: str | None) -> str:
     if reply_prices <= catalog_prices:
         return reply
     return f"Here's what I found:\n\n{catalog_output}"
+
+
+def _apply_order_confirmation_guardrail(reply: str, messages: list) -> str:
+    """If the reply tells the customer their order is confirmed/placed but
+    confirm_order was never actually called (or was called and failed --
+    e.g. an empty cart), the LLM said so without it being true. Placing an
+    order is the one irreversible-feeling claim in this whole flow, so it
+    gets the same treatment as the pricing guardrail: never trust the LLM's
+    own account of what happened, check the tool's actual result."""
+    if not _ORDER_CONFIRMED_CLAIM_PATTERN.search(reply):
+        return reply
+
+    confirm_output = _last_tool_output(messages, "confirm_order")
+    if confirm_output is not None and confirm_output.startswith("Order confirmed."):
+        return reply  # a real confirm_order call this thread actually succeeded
+
+    update_output = _last_tool_output(messages, "update_order")
+    if update_output is not None:
+        return f"Let's just confirm before I place this -- here's the order so far:\n\n{update_output}\n\nShall I go ahead and confirm it?"
+    return "I haven't actually placed an order yet -- could you confirm the items and fulfillment details again so I can do that?"

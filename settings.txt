@@ -1,0 +1,7 @@
+1. Timezone
+2. Negotiations
+3. Currency
+4. Delivery support
+    - Delivery mode
+        - Cash on Delivery
+    

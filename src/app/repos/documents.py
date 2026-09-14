@@ -1,8 +1,9 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import ColumnElement
 
 from app.models.documents import ContentSource, Document, DocumentChunk, DocumentStatus
 from app.repos.tenant_scope import tenant_scope
@@ -17,6 +18,8 @@ async def create_document(
     tags: list[str] | None = None,
     draft_content: str = "",
     source_ref: str | None = None,
+    active_from: datetime | None = None,
+    active_until: datetime | None = None,
 ) -> Document:
     document = Document(
         tenant_id=tenant_id,
@@ -25,6 +28,8 @@ async def create_document(
         tags=tags,
         draft_content=draft_content,
         source_ref=source_ref,
+        active_from=active_from,
+        active_until=active_until,
     )
     session.add(document)
     await session.flush()
@@ -36,12 +41,42 @@ async def get_document(session: AsyncSession, tenant_id: uuid.UUID, document_id:
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def sweep_expired_documents(session: AsyncSession, tenant_id: uuid.UUID) -> None:
+    """Lazy cleanup for temporary documents: any ACTIVE document whose
+    active_until has passed gets flipped to INACTIVE (and its chunks
+    deactivated to match), so the dashboard's displayed status reflects
+    reality without needing a scheduler. This is cosmetic/hygiene, not
+    correctness-critical -- the RAG search functions below already exclude
+    an expired document's chunks via _within_active_window() regardless of
+    whether this sweep has run yet. Called opportunistically from
+    list_documents/get_document; the caller must commit."""
+    now = func.now()
+    expired_ids = (
+        await session.execute(
+            select(Document.id).where(
+                tenant_scope(Document.tenant_id, tenant_id),
+                Document.status == DocumentStatus.ACTIVE,
+                Document.active_until.is_not(None),
+                Document.active_until < now,
+            )
+        )
+    ).scalars().all()
+    if not expired_ids:
+        return
+    await session.execute(update(Document).where(Document.id.in_(expired_ids)).values(status=DocumentStatus.INACTIVE))
+    await session.execute(
+        update(DocumentChunk).where(DocumentChunk.document_id.in_(expired_ids)).values(is_active=False)
+    )
+    await session.flush()
+
+
 async def list_documents(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     *,
     status: DocumentStatus | None = None,
     tag: str | None = None,
+    expired_only: bool = False,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[Document], int]:
@@ -53,6 +88,13 @@ async def list_documents(
     if tag:
         stmt = stmt.where(Document.tags.any(tag))
         count_stmt = count_stmt.where(Document.tags.any(tag))
+    if expired_only:
+        # Not a `status` value -- is_expired is a date comparison, independent
+        # of whether the lazy sweep has already flipped this document to
+        # inactive yet (see sweep_expired_documents).
+        expired_condition = Document.active_until.is_not(None) & (Document.active_until < func.now())
+        stmt = stmt.where(expired_condition)
+        count_stmt = count_stmt.where(expired_condition)
 
     total = (await session.execute(count_stmt)).scalar_one()
     stmt = stmt.order_by(Document.updated_at.desc()).offset((page - 1) * page_size).limit(page_size)
@@ -60,23 +102,36 @@ async def list_documents(
     return list(items), total
 
 
+_CONTENT_FIELDS = {"title", "tags", "draft_content"}
+# Fields where an explicit `null` is meaningful (clear it) rather than
+# "leave unset" -- unlike title/tags/draft_content, which this function
+# always treats a None as "not sent" (see the loop below).
+_NULLABLE_FIELDS = {"active_from", "active_until"}
+
+
 async def update_document_draft(
     session: AsyncSession, tenant_id: uuid.UUID, document_id: uuid.UUID, **fields: object
 ) -> Document | None:
-    """Edit title/tags/draft_content. Any edit returns the document to
+    """Edit title/tags/draft_content, or the active_from/active_until
+    window. Editing title/tags/draft_content returns the document to
     `draft` status (a previously active/failed/inactive document must be
-    re-published to pick up the change) -- see plan's PATCH semantics."""
+    re-published to pick up the change) -- see plan's PATCH semantics.
+    Editing only the active window does NOT force a re-publish: the content
+    hasn't changed, and RAG search already re-checks the window on every
+    query regardless of `status` -- forcing a full re-embed just to move a
+    date would be wasteful (this is exactly the "reuse next season" case)."""
     document = await get_document(session, tenant_id, document_id)
     if document is None:
         return None
 
-    changed = False
+    content_changed = False
     for key, value in fields.items():
-        if value is not None:
+        if value is not None or key in _NULLABLE_FIELDS:
             setattr(document, key, value)
-            changed = True
+            if key in _CONTENT_FIELDS:
+                content_changed = True
 
-    if changed and document.status != DocumentStatus.DRAFT:
+    if content_changed and document.status != DocumentStatus.DRAFT:
         document.status = DocumentStatus.DRAFT
 
     await session.flush()
@@ -175,6 +230,19 @@ async def discard_chunks(session: AsyncSession, chunk_ids: list[uuid.UUID]) -> N
     await session.flush()
 
 
+def _within_active_window() -> ColumnElement[bool]:
+    """True when `now` falls inside the document's optional active_from /
+    active_until window -- both null (the common, non-temporary case) always
+    passes. Applied to every RAG search below so a temporary document (e.g.
+    a seasonal offer) is instantly excluded/included at its boundaries,
+    with no scheduled job needed for correctness."""
+    now = func.now()
+    return and_(
+        or_(Document.active_from.is_(None), Document.active_from <= now),
+        or_(Document.active_until.is_(None), Document.active_until >= now),
+    )
+
+
 async def search_similar_chunks(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -190,6 +258,7 @@ async def search_similar_chunks(
             tenant_scope(DocumentChunk.tenant_id, tenant_id),
             DocumentChunk.is_active.is_(True),
             Document.status == DocumentStatus.ACTIVE,
+            _within_active_window(),
         )
         .order_by(DocumentChunk.embedding.cosine_distance(query_embedding))
         .limit(k)
@@ -215,6 +284,7 @@ async def search_similar_chunks_with_scores(
             tenant_scope(DocumentChunk.tenant_id, tenant_id),
             DocumentChunk.is_active.is_(True),
             Document.status == DocumentStatus.ACTIVE,
+            _within_active_window(),
         )
         .order_by(distance)
         .limit(k)
@@ -235,6 +305,7 @@ async def list_active_chunks(session: AsyncSession, tenant_id: uuid.UUID, limit:
             tenant_scope(DocumentChunk.tenant_id, tenant_id),
             DocumentChunk.is_active.is_(True),
             Document.status == DocumentStatus.ACTIVE,
+            _within_active_window(),
         )
         .limit(limit)
     )
