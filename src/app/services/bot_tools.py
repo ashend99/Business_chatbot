@@ -20,21 +20,44 @@ import uuid
 from typing import Literal
 
 from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, Field
 
 from app.components.rag import get_rag
 from app.db.session import AsyncSessionLocal
 from app.models.catalog import StockStatus
 from app.models.conversations import ConversationChannel
 from app.models.leads import LeadStatus
+from app.models.orders import Order
 from app.repos import catalog as catalog_repo
 from app.repos import leads as leads_repo
+from app.repos import orders as orders_repo
 from app.repos import tenants as tenants_repo
 from app.services.email import get_email_sender
-from app.services.notifications import notify_new_lead
+from app.services.notifications import notify_new_lead, notify_new_order
 from common import PROJECT_CONFIG
 
 _agent_config = PROJECT_CONFIG.get("agent", {})
 RAG_SIMILARITY_THRESHOLD = _agent_config.get("rag_similarity_threshold", 0.25)
+
+
+class OrderItemInput(BaseModel):
+    variant_id: str = Field(description="The variant_id shown in a prior search_catalog result.")
+    quantity: int = Field(ge=1, description="How many of this item the customer wants.")
+
+
+def _format_order_summary(order: Order) -> str:
+    lines = [
+        f"{item['quantity']}x {item['product_name']}"
+        + (f" ({item['variant_label']})" if item.get("variant_label") else "")
+        + f" - ${item['unit_price']} each = ${item['line_total']}"
+        for item in order.items
+    ]
+    parts = ["\n".join(lines), f"Total: ${order.total}"]
+    if order.fulfillment:
+        parts.append(f"Fulfillment: {order.fulfillment}")
+    if order.notes:
+        parts.append(f"Notes: {order.notes}")
+    return "\n".join(p for p in parts if p)
 
 
 def _format_variant_line(variant, product) -> str:
@@ -98,17 +121,60 @@ def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: 
             )
             await session.commit()
 
-            # # only ever fires once per lead -- became_new is only True on
-            # # the specific transition into NEW, not on every call
-            # if became_new:
-            #     tenant = await tenants_repo.get_tenant_by_id(session, tenant_id)
-            #     if tenant is not None:
-            #         await notify_new_lead(get_email_sender(), tenant, lead)
+            # only ever fires once per lead -- became_new is only True on
+            # the specific transition into NEW, not on every call
+            if became_new:
+                tenant = await tenants_repo.get_tenant_by_id(session, tenant_id)
+                if tenant is not None:
+                    await notify_new_lead(get_email_sender(), tenant, lead)
 
         return json.dumps({"lead_id": str(lead.id), "status": lead.status.value})
+
+    async def update_order(
+        items: list[OrderItemInput], fulfillment: dict | None = None, notes: str | None = None
+    ) -> str:
+        """Set the customer's current cart to exactly these items -- always pass the *entire* cart as it should be now (not just what changed), since this replaces the previous cart rather than adding to it. Call this as soon as the customer names specific items they want, and again any time the cart changes (quantity edits, added/removed items, fulfillment details). `fulfillment` should describe how the order reaches the customer once known, e.g. {"type": "delivery", "address": "...", "needed_by": "..."} or {"type": "pickup", "time": "..."} -- omit until you know it. Prices and the total are computed from the real catalog, never invent them yourself."""
+        async with AsyncSessionLocal() as session:
+            try:
+                order = await orders_repo.update_order(
+                    session,
+                    tenant_id,
+                    conversation_id=conversation_id,
+                    items=[item.model_dump() for item in items],
+                    fulfillment=fulfillment,
+                    notes=notes,
+                    source_channel=channel_type.value,
+                )
+            except orders_repo.InvalidOrderItem as exc:
+                await session.rollback()
+                return f"Could not update the cart: {exc}"
+            await session.commit()
+        return _format_order_summary(order)
+
+    async def confirm_order() -> str:
+        """Finalize the current cart as a placed order, once the customer has explicitly confirmed the items and fulfillment details are correct. Do not call this speculatively or before they've agreed. This requires their contact details already being captured via create_lead -- if it tells you something is missing, ask for that and call create_lead before trying again. You never collect or mention taking payment -- that is handled separately by the business after this."""
+        async with AsyncSessionLocal() as session:
+            try:
+                order = await orders_repo.confirm_order(session, tenant_id, conversation_id)
+            except orders_repo.NoCartToConfirm:
+                await session.rollback()
+                return "There's no cart to confirm yet -- add items with update_order first."
+            except orders_repo.MissingRequiredContactInfo as exc:
+                await session.rollback()
+                missing = ", ".join(exc.missing_labels)
+                return f"Can't confirm yet -- still need the customer's {missing}. Ask for it, call create_lead with it, then try confirm_order again."
+            await session.commit()
+
+            tenant = await tenants_repo.get_tenant_by_id(session, tenant_id)
+            if tenant is not None:
+                await notify_new_order(get_email_sender(), tenant, order)
+
+        return f"Order confirmed.\n\n{_format_order_summary(order)}"
 
     return [
         StructuredTool.from_function(coroutine=search_documents, name="search_documents"),
         StructuredTool.from_function(coroutine=search_catalog, name="search_catalog"),
         StructuredTool.from_function(coroutine=create_lead, name="create_lead"),
+        StructuredTool.from_function(coroutine=update_order, name="update_order"),
+        StructuredTool.from_function(coroutine=confirm_order, name="confirm_order"),
     ]

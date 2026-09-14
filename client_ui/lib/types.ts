@@ -107,6 +107,55 @@ export interface ConversationDetail {
   messages: MessageRead[];
 }
 
+// ---- Orders ---------------------------------------------------------------
+
+export type OrderStatus = "draft" | "placed" | "completed" | "cancelled";
+
+export interface OrderItem {
+  variant_id: string;
+  product_name: string;
+  variant_label: string | null;
+  quantity: number;
+  unit_price: string;
+  line_total: string;
+}
+
+export interface OrderListItem {
+  id: string;
+  status: OrderStatus;
+  items: OrderItem[];
+  total: string;
+  fulfillment: Record<string, string> | null;
+  created_at: string;
+}
+
+export interface OrderListResponse {
+  items: OrderListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface OrderDetail {
+  id: string;
+  conversation_id: string | null;
+  lead_id: string | null;
+  status: OrderStatus;
+  items: OrderItem[];
+  total: string;
+  fulfillment: Record<string, string> | null;
+  notes: string | null;
+  source_channel: string | null;
+  created_at: string;
+  updated_at: string;
+  lead_fields: Record<string, string>;
+  transcript: TranscriptMessage[];
+}
+
+export interface OrderUpdate {
+  status: OrderStatus;
+}
+
 // ---- Catalog ----------------------------------------------------------
 
 export type StockStatus = "in_stock" | "out_of_stock" | "unlimited";

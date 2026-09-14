@@ -3,6 +3,7 @@ from .catalog import Category, CategoryAttribute, Product, StockStatus, Variant
 from .conversations import Conversation, ConversationChannel, ConversationStatus, Message, MessageRole
 from .documents import ContentSource, Document, DocumentChunk, DocumentStatus
 from .leads import Lead, LeadFieldDef, LeadFieldType, LeadStatus
+from .orders import Order, OrderStatus
 from .tenants import (
     ApiKeyTypes,
     ChannelConnections,
@@ -40,4 +41,6 @@ __all__ = [
     "LeadStatus",
     "LeadFieldDef",
     "LeadFieldType",
+    "Order",
+    "OrderStatus",
 ]

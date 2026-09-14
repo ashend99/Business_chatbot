@@ -3,6 +3,7 @@ import {
   ConversationsIcon,
   KnowledgeIcon,
   LeadsIcon,
+  OrdersIcon,
   OverviewIcon,
   SettingsIcon,
 } from "@/components/icons";
@@ -17,6 +18,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Overview", icon: OverviewIcon },
   { href: "/leads", label: "Leads", icon: LeadsIcon },
+  { href: "/orders", label: "Orders", icon: OrdersIcon },
   { href: "/documents", label: "Knowledge base", icon: KnowledgeIcon },
   { href: "/catalog", label: "Catalog", icon: CatalogIcon },
   { href: "/conversations", label: "Conversations", icon: ConversationsIcon },

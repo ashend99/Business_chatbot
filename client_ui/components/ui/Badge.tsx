@@ -1,4 +1,4 @@
-import type { ConversationStatus, DocumentStatus, LeadStatus } from "@/lib/types";
+import type { ConversationStatus, DocumentStatus, LeadStatus, OrderStatus } from "@/lib/types";
 
 const LEAD_STATUS_STYLES: Record<LeadStatus, string> = {
   interested:
@@ -75,5 +75,17 @@ const CONVERSATION_STATUS: Record<ConversationStatus, { label: string; tone: Ton
 
 export function ConversationStatusBadge({ status }: { status: ConversationStatus }) {
   const { label, tone } = CONVERSATION_STATUS[status];
+  return <Badge tone={tone}>{label}</Badge>;
+}
+
+const ORDER_STATUS: Record<OrderStatus, { label: string; tone: Tone }> = {
+  draft: { label: "Draft", tone: "neutral" },
+  placed: { label: "Placed", tone: "warning" },
+  completed: { label: "Completed", tone: "positive" },
+  cancelled: { label: "Cancelled", tone: "danger" },
+};
+
+export function OrderStatusBadge({ status }: { status: OrderStatus }) {
+  const { label, tone } = ORDER_STATUS[status];
   return <Badge tone={tone}>{label}</Badge>;
 }

@@ -12,7 +12,8 @@ import uuid
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.leads import Lead, LeadStatus
+from app.models.leads import Lead, LeadFieldDef, LeadStatus
+from app.models.orders import Order
 from app.repos.tenant_scope import tenant_scope
 
 
@@ -64,18 +65,64 @@ async def create_or_update_lead_from_bot(
         )
         session.add(lead)
         await session.flush()
-        return lead, status == LeadStatus.NEW
+        became_new = status == LeadStatus.NEW
+    else:
+        lead = existing
+        became_new = status == LeadStatus.NEW and existing.status != LeadStatus.NEW
+        lead.status = status
+        lead.fields = {**lead.fields, **fields}
+        if matched_variant_id is not None:
+            lead.matched_variant_id = matched_variant_id
+        if source_channel is not None:
+            lead.source_channel = source_channel
+        await session.flush()
+        # updated_at is a server-side onupdate default -- refresh so the
+        # ORM object reflects the new value instead of lazily reloading it
+        # later outside an async-aware context (which raises MissingGreenlet).
+        await session.refresh(lead)
 
-    became_new = status == LeadStatus.NEW and existing.status != LeadStatus.NEW
-    existing.status = status
-    existing.fields = {**existing.fields, **fields}
-    if matched_variant_id is not None:
-        existing.matched_variant_id = matched_variant_id
-    if source_channel is not None:
-        existing.source_channel = source_channel
-    await session.flush()
-    # updated_at is a server-side onupdate default -- refresh so the ORM
-    # object reflects the new value instead of lazily reloading it later
-    # outside an async-aware context (which raises MissingGreenlet).
-    await session.refresh(existing)
-    return existing, became_new
+    if conversation_id is not None:
+        # repos/orders.py links Order.lead_id -> this lead the same way,
+        # the moment it sees one exist -- but if create_lead and
+        # update_order/confirm_order both fire in the same LLM turn, they
+        # run concurrently (see the docstring above) and whichever commits
+        # first won't see the other's not-yet-committed row. Re-checking
+        # here too means the link self-heals from whichever side runs
+        # last, instead of only ever getting attached from the order side.
+        order_stmt = select(Order).where(
+            tenant_scope(Order.tenant_id, tenant_id), Order.conversation_id == conversation_id, Order.lead_id.is_(None)
+        )
+        for order in (await session.execute(order_stmt)).scalars().all():
+            order.lead_id = lead.id
+        await session.flush()
+
+    return lead, became_new
+
+
+async def get_missing_required_fields(
+    session: AsyncSession, tenant_id: uuid.UUID, lead_id: uuid.UUID | None
+) -> list[str]:
+    """Labels of this tenant's dashboard-configured required lead fields
+    (LeadFieldDef.required, seeded name/phone by default -- see
+    leads_admin.seed_default_lead_field_defs) that aren't yet filled in on
+    the given lead. Used by repos/orders.py's confirm_order to require real
+    contact info before an order can be placed, without hardcoding "name"/
+    "phone" -- whatever a tenant has actually marked required is what's
+    enforced, so this generalizes across each tenant's own configured
+    fields rather than assuming every business wants the same two."""
+    stmt = (
+        select(LeadFieldDef.field_key, LeadFieldDef.label)
+        .where(tenant_scope(LeadFieldDef.tenant_id, tenant_id), LeadFieldDef.required.is_(True))
+        .order_by(LeadFieldDef.sort_order)
+    )
+    required = (await session.execute(stmt)).all()
+    if not required:
+        return []
+
+    lead_fields: dict = {}
+    if lead_id is not None:
+        lead = await session.get(Lead, lead_id)
+        if lead is not None:
+            lead_fields = lead.fields or {}
+
+    return [label for field_key, label in required if not lead_fields.get(field_key)]

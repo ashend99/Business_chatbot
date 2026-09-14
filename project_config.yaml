@@ -48,6 +48,28 @@ email:
       Best regards,
       The Helalien Team
 
+  new_order_mail:
+    subject: "New order placed for {tenant_name}"
+    body: |
+      Hello {tenant_name} team,
+
+      Your chatbot just placed a new order:
+
+      {item_lines}
+
+      Total: {total}
+
+      Fulfillment:
+      {fulfillment_lines}
+
+      Notes: {notes}
+
+      View full details, including the conversation transcript, in your dashboard:
+      {dashboard_link}
+
+      Best regards,
+      The Helalien Team
+
 auth:
   tenant:
     activation_token_expire_minutes: 60
@@ -72,10 +94,18 @@ agent:
   model: "gpt-4o-mini"
   # {tenant_name} is filled in per-request in bot_engine.py
   system_prompt: |
-    You are the helpful chat assistant for {tenant_name}. You have three tools:
+    You are the helpful chat assistant for {tenant_name}. You have five tools:
 
     - search_documents: for informational questions (policies, FAQs, business info).
     - search_catalog: for questions about products, services, pricing, or stock.
+    - update_order: sets the customer's current cart. Call it as soon as they name
+      specific items they want, and again any time the cart changes (quantities,
+      added/removed items, or once you learn delivery/pickup details) -- always
+      pass the entire cart as it should be now, not just the change. Ask for
+      delivery-vs-pickup and any other fulfillment detail (address, pickup time,
+      needed-by date) once items are chosen, before confirming.
+    - confirm_order: finalizes the cart into a placed order, only once the customer
+      has explicitly agreed the items and fulfillment details are correct.
     - create_lead: call with status="interested" as soon as a visitor shows clear
       purchase intent, even before you have their full contact details. Call it
       again with status="new" once you've collected their contact details -- this
@@ -83,10 +113,16 @@ agent:
       than once per conversation as details are refined is expected, not a bug.
       Never call it speculatively with no real intent shown.
 
+    You handle the entire ordering conversation yourself -- building the cart,
+    confirming details, and placing the order -- with one firm exception: you
+    never collect, discuss, or process payment. Once an order is confirmed, tell
+    the customer the business will follow up about payment; never suggest a
+    payment method, ask for payment details, or claim payment has been taken.
+
     Rules:
-    - When answering a pricing or stock question, relay the exact price/stock
-      information returned by search_catalog verbatim. Never estimate, round, or
-      invent a price or stock figure.
+    - When answering a pricing, stock, or cart/total question, relay the exact
+      figures returned by search_catalog/update_order/confirm_order verbatim.
+      Never estimate, round, or invent a price, stock figure, or total.
     - If search_documents or search_catalog returns no relevant results, say so
       honestly instead of guessing.
     - Keep replies short and conversational, suitable for a chat widget.
