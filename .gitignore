@@ -53,3 +53,6 @@ eval/rag/results/
 
 .tmp_activation_password.json
 .tmp_activation_password.jsonl
+/cache/*
+/node_modules/
+client_ui/
