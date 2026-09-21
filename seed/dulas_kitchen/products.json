@@ -1,219 +1,117 @@
 [
   {
-    "category_key": "appetizers",
-    "name": "Spring Rolls",
-    "description": "Crispy fried rolls served with sweet chili sauce.",
+    "category_key": "fried-rice",
+    "name": "Chicken Fried Rice",
     "variants": [
-      {"name": "Vegetable (6 pcs)", "sku": "APP-SPR-VEG", "price": 650.00, "stock_status": "in_stock"},
-      {"name": "Chicken (6 pcs)", "sku": "APP-SPR-CHK", "price": 750.00, "stock_status": "in_stock"}
+      {"name": "Small", "price": 1500.00, "stock_status": "in_stock", "attribute_values": {"Size": "Small"}},
+      {"name": "Medium", "price": 1800.00, "stock_status": "in_stock", "attribute_values": {"Size": "Medium"}},
+      {"name": "Large", "price": 2200.00, "stock_status": "in_stock", "attribute_values": {"Size": "Large"}}
     ]
   },
   {
-    "category_key": "appetizers",
-    "name": "Chicken Wings",
-    "description": "Spiced fried wings, 8 pieces per order.",
+    "category_key": "fried-rice",
+    "name": "Mixed Fried Rice",
     "variants": [
-      {"name": "Regular (8 pcs)", "sku": "APP-WNG-REG", "price": 950.00, "stock_status": "in_stock"}
+      {"name": "Small", "price": 1800.00, "stock_status": "in_stock", "attribute_values": {"Size": "Small"}},
+      {"name": "Medium", "price": 2200.00, "stock_status": "in_stock", "attribute_values": {"Size": "Medium"}},
+      {"name": "Large", "price": 2600.00, "stock_status": "in_stock", "attribute_values": {"Size": "Large"}}
     ]
   },
   {
-    "category_key": "appetizers",
-    "name": "Fish Cutlets",
-    "description": "Deep-fried spiced fish and potato cutlets, 6 pieces.",
+    "category_key": "fried-rice",
+    "name": "Seafood Fried Rice",
     "variants": [
-      {"name": "6 pcs", "sku": "APP-CUT-FSH", "price": 700.00, "stock_status": "in_stock"}
+      {"name": "Small", "price": 1600.00, "stock_status": "in_stock", "attribute_values": {"Size": "Small"}},
+      {"name": "Medium", "price": 2000.00, "stock_status": "in_stock", "attribute_values": {"Size": "Medium"}},
+      {"name": "Large", "price": 2500.00, "stock_status": "in_stock", "attribute_values": {"Size": "Large"}}
     ]
   },
   {
-    "category_key": "appetizers",
-    "name": "Devilled Cashews",
-    "description": "Cashew nuts tossed in a spicy devilled sauce with onion and chili.",
+    "category_key": "kottu",
+    "name": "Chicken Cheese Kottu",
     "variants": [
-      {"name": "Regular", "sku": "APP-CSH-DEV", "price": 550.00, "stock_status": "in_stock"}
+      {"name": "Small", "price": 2000.00, "stock_status": "in_stock", "attribute_values": {"Size": "Small"}},
+      {"name": "Large", "price": 2500.00, "stock_status": "in_stock", "attribute_values": {"Size": "Large"}}
     ]
   },
   {
-    "category_key": "soups",
-    "name": "Chicken Sweet Corn Soup",
+    "category_key": "kottu",
+    "name": "Chicken Kottu",
     "variants": [
-      {"name": "Regular", "sku": "SOU-CHK-CRN", "price": 450.00, "stock_status": "in_stock"}
+      {"name": "Small", "price": 1800.00, "stock_status": "in_stock", "attribute_values": {"Size": "Small"}},
+      {"name": "Large", "price": 2400.00, "stock_status": "in_stock", "attribute_values": {"Size": "Large"}}
     ]
   },
   {
-    "category_key": "soups",
-    "name": "Cream of Mushroom Soup",
+    "category_key": "pizza",
+    "name": "Chicken Pizza",
     "variants": [
-      {"name": "Regular", "sku": "SOU-MSH-CRM", "price": 480.00, "stock_status": "in_stock"}
+      {"name": "Small", "price": 2000.00, "stock_status": "in_stock", "attribute_values": {"Size": "Small"}},
+      {"name": "Large", "price": 2800.00, "stock_status": "in_stock", "attribute_values": {"Size": "Large"}}
     ]
   },
   {
-    "category_key": "soups",
-    "name": "Seafood Soup",
+    "category_key": "pizza",
+    "name": "Pizza Margeritta",
     "variants": [
-      {"name": "Regular", "sku": "SOU-SEA-MIX", "price": 650.00, "stock_status": "in_stock"}
+      {"name": "Small", "price": 1800.00, "stock_status": "in_stock", "attribute_values": {"Size": "Small"}},
+      {"name": "Large", "price": 2400.00, "stock_status": "in_stock", "attribute_values": {"Size": "Large"}}
     ]
   },
   {
-    "category_key": "rice-noodles",
-    "name": "Fried Rice",
-    "description": "Wok-tossed rice with egg and vegetables.",
+    "category_key": "cold-coffee",
+    "name": "Cold Espresso",
     "variants": [
-      {"name": "Vegetable", "sku": "RIC-FRD-VEG", "price": 800.00, "stock_status": "in_stock"},
-      {"name": "Egg", "sku": "RIC-FRD-EGG", "price": 850.00, "stock_status": "in_stock"},
-      {"name": "Chicken", "sku": "RIC-FRD-CHK", "price": 950.00, "stock_status": "in_stock"},
-      {"name": "Seafood", "sku": "RIC-FRD-SEA", "price": 1250.00, "stock_status": "in_stock"}
+      {"name": "Cold Espresso", "price": 600.00, "stock_status": "in_stock"}
     ]
   },
   {
-    "category_key": "rice-noodles",
-    "name": "Kottu Roti",
-    "description": "Chopped roti stir-fried with vegetables, egg, and your choice of protein.",
+    "category_key": "cold-coffee",
+    "name": "Iced Caramel Coffee",
     "variants": [
-      {"name": "Vegetable", "sku": "KOT-VEG", "price": 850.00, "stock_status": "in_stock"},
-      {"name": "Chicken", "sku": "KOT-CHK", "price": 1050.00, "stock_status": "in_stock"},
-      {"name": "Cheese Chicken", "sku": "KOT-CHK-CHZ", "price": 1250.00, "stock_status": "in_stock"}
+      {"name": "Iced Caramel Coffee", "price": 1000.00, "stock_status": "in_stock"}
     ]
   },
   {
-    "category_key": "rice-noodles",
-    "name": "Nasi Goreng",
-    "description": "Indonesian-style spiced fried rice with a fried egg on top.",
+    "category_key": "cold-coffee",
+    "name": "Iced Coffee",
     "variants": [
-      {"name": "Regular", "sku": "RIC-NASI", "price": 1100.00, "stock_status": "in_stock"}
+      {"name": "Iced Coffee", "price": 800.00, "stock_status": "in_stock"}
     ]
   },
   {
-    "category_key": "curries",
-    "name": "Chicken Curry",
+    "category_key": "hot-coffee",
+    "name": "Americano",
     "variants": [
-      {"name": "Regular", "sku": "CUR-CHK", "price": 1050.00, "stock_status": "in_stock"}
+      {"name": "Americano", "price": 700.00, "stock_status": "in_stock"}
     ]
   },
   {
-    "category_key": "curries",
-    "name": "Fish Curry",
+    "category_key": "hot-coffee",
+    "name": "Double Espresso",
     "variants": [
-      {"name": "Regular", "sku": "CUR-FSH", "price": 1150.00, "stock_status": "in_stock"}
+      {"name": "Double Espresso", "price": 700.00, "stock_status": "in_stock"}
     ]
   },
   {
-    "category_key": "curries",
-    "name": "Dhal Curry (Parippu)",
+    "category_key": "hot-coffee",
+    "name": "Espresso",
     "variants": [
-      {"name": "Regular", "sku": "CUR-DHL", "price": 500.00, "stock_status": "in_stock"}
+      {"name": "Espresso", "price": 600.00, "stock_status": "in_stock"}
     ]
   },
   {
-    "category_key": "curries",
-    "name": "Cuttlefish Curry",
+    "category_key": "hot-coffee",
+    "name": "Latte",
     "variants": [
-      {"name": "Regular", "sku": "CUR-CTL", "price": 1350.00, "stock_status": "in_stock"}
+      {"name": "Latte", "price": 650.00, "stock_status": "in_stock"}
     ]
   },
   {
-    "category_key": "grills-bbq",
-    "name": "Grilled Chicken",
+    "category_key": "hot-coffee",
+    "name": "Latte Machchiato",
     "variants": [
-      {"name": "Half", "sku": "GRL-CHK-HLF", "price": 1450.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "grills-bbq",
-    "name": "BBQ Pork Ribs",
-    "variants": [
-      {"name": "Full Rack", "sku": "GRL-PRK-RIB", "price": 1850.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "grills-bbq",
-    "name": "Grilled Prawns",
-    "variants": [
-      {"name": "6 pcs", "sku": "GRL-PRW", "price": 1950.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "soft-drinks",
-    "name": "Coca-Cola",
-    "variants": [
-      {"name": "330ml", "sku": "BEV-COKE-330", "price": 250.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "soft-drinks",
-    "name": "Sprite",
-    "variants": [
-      {"name": "330ml", "sku": "BEV-SPRT-330", "price": 250.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "soft-drinks",
-    "name": "Ginger Beer",
-    "variants": [
-      {"name": "330ml", "sku": "BEV-GNGR-330", "price": 280.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "fresh-juices",
-    "name": "Watermelon Juice",
-    "variants": [
-      {"name": "Regular", "sku": "JUI-WTRMLN", "price": 400.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "fresh-juices",
-    "name": "Mango Juice",
-    "description": "Seasonal -- made with fresh mango when in season.",
-    "variants": [
-      {
-        "name": "Regular",
-        "sku": "JUI-MANGO",
-        "price": 450.00,
-        "stock_status": "out_of_stock",
-        "stock_message": "Out of season -- back around April"
-      }
-    ]
-  },
-  {
-    "category_key": "fresh-juices",
-    "name": "Lime Juice",
-    "variants": [
-      {"name": "Regular", "sku": "JUI-LIME", "price": 350.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "mocktails",
-    "name": "Virgin Mojito",
-    "variants": [
-      {"name": "Regular", "sku": "MOC-MOJITO", "price": 550.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "mocktails",
-    "name": "Fruit Punch",
-    "variants": [
-      {"name": "Regular", "sku": "MOC-PUNCH", "price": 550.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "desserts",
-    "name": "Watalappan",
-    "description": "Traditional Sri Lankan coconut custard pudding with jaggery and cashews.",
-    "variants": [
-      {"name": "Regular", "sku": "DES-WATA", "price": 400.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "desserts",
-    "name": "Chocolate Lava Cake",
-    "variants": [
-      {"name": "Regular", "sku": "DES-LAVA", "price": 650.00, "stock_status": "in_stock"}
-    ]
-  },
-  {
-    "category_key": "desserts",
-    "name": "Vanilla Ice Cream",
-    "variants": [
-      {"name": "2 Scoops", "sku": "DES-ICE-VAN", "price": 350.00, "stock_status": "in_stock"}
+      {"name": "Latte Machchiato", "price": 900.00, "stock_status": "in_stock"}
     ]
   }
 ]

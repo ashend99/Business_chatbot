@@ -5,10 +5,10 @@ Run with:
     python seed/seed_business.py --slug dulas_kitchen --publish
     python seed/seed_business.py --slug another_business --name "Another Business" --email owner@example.com
 
-Each `--slug` corresponds to a directory under seed/ holding up to three
+Each `--slug` corresponds to a directory under seed/ holding up to four
 files (all optional -- whichever are present get seeded): documents.json,
-categories.json, products.json. See seed/dulas_kitchen/README.md for the
-exact shape each file must match.
+categories.json, products.json, settings.json. See
+seed/dulas_kitchen/README.md for the exact shape each file must match.
 
 The slug doubles as the tenant's `tenants.slug` -- the tenant (and one
 TenantAdmin login, so you can view the seeded data immediately) is created
@@ -45,6 +45,7 @@ from app.models.documents import ContentSource
 from app.models.tenants import Tenant
 from app.repos import catalog as catalog_repo
 from app.repos import documents as documents_repo
+from app.repos import settings_admin as settings_admin_repo
 from app.repos import tenants as tenants_repo
 
 SEED_ROOT = Path(__file__).resolve().parent
@@ -80,6 +81,25 @@ async def _get_or_create_tenant(
     return tenant
 
 
+async def _ensure_settings(session: AsyncSession, tenant_id: uuid.UUID, seed_settings: dict | None) -> None:
+    """Every tenant needs its admin + tenant settings rows (onboarding creates
+    them; this script creates tenants directly, so it must too). Currency and
+    timezone come from settings.json -- currency is admin-only and matters
+    (orders store bare numbers), so it shouldn't silently default to USD for a
+    business priced in something else. Existing rows are left untouched."""
+    if await settings_admin_repo.get_admin_settings(session, tenant_id) is not None:
+        print("Settings: already present")
+        return
+    seed_settings = seed_settings or {}
+    await settings_admin_repo.create_default_settings(
+        session,
+        tenant_id,
+        currency_code=seed_settings.get("currency_code", "USD"),
+        timezone=seed_settings.get("timezone", "UTC"),
+    )
+    print(f"Settings: created (currency={seed_settings.get('currency_code', 'USD')})")
+
+
 async def _seed_categories(session: AsyncSession, tenant_id: uuid.UUID, categories: list[dict]) -> dict[str, uuid.UUID]:
     """Topologically create categories (parents before children), matching
     existing rows by (name, parent) so a re-run doesn't duplicate them.
@@ -109,6 +129,11 @@ async def _seed_categories(session: AsyncSession, tenant_id: uuid.UUID, categori
                 )
                 key_to_id[cat["key"]] = row.id
                 created += 1
+                # reusable variant-building attributes (e.g. Size -> [Small, Medium, Large]);
+                # products under this category (or a descendant) inherit them. Only set for
+                # newly created categories -- an existing one's attributes are the tenant's to edit.
+                if cat.get("attributes"):
+                    await catalog_repo.replace_category_attributes(session, tenant_id, row.id, cat["attributes"])
             progressed = True
 
         if not progressed:
@@ -141,6 +166,8 @@ async def _seed_products(
                 "stock_status": StockStatus(v.get("stock_status", "in_stock")),
                 "stock_qty": v.get("stock_qty"),
                 "stock_message": v.get("stock_message"),
+                # which attribute choice the variant represents, e.g. {"Size": "Large"}
+                "attribute_values": v.get("attribute_values"),
             }
             for v in prod["variants"]
         ]
@@ -197,6 +224,7 @@ async def seed(args: argparse.Namespace) -> None:
     documents = _load_json(args.slug, "documents.json")
     categories = _load_json(args.slug, "categories.json")
     products = _load_json(args.slug, "products.json")
+    seed_settings = _load_json(args.slug, "settings.json")
 
     if documents is None and categories is None and products is None:
         raise SystemExit(
@@ -215,6 +243,9 @@ async def seed(args: argparse.Namespace) -> None:
             username=args.username,
             password=args.password,
         )
+        await session.commit()
+
+        await _ensure_settings(session, tenant.id, seed_settings)
         await session.commit()
 
         category_ids: dict[str, uuid.UUID] = {}
