@@ -50,11 +50,16 @@ async def add_message(
     # now() returns the transaction's start time for every statement in it
     # -- both rows would get an identical timestamp, making transcript order
     # (get_recent_messages/list_conversations' preview) non-deterministic.
+    #
+    # Postgres text columns categorically reject NUL (0x00) bytes -- an
+    # occasional LLM output artifact (seen from both a user's real message
+    # and the bot's own reply), which otherwise crashes the whole turn with
+    # a raw 500 instead of the conversation just continuing.
     message = Message(
         tenant_id=tenant_id,
         conversation_id=conversation_id,
         role=role,
-        content=content,
+        content=content.replace("\x00", ""),
         created_at=datetime.now(timezone.utc),
     )
     session.add(message)

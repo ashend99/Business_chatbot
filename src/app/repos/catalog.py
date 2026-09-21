@@ -345,3 +345,55 @@ async def search_catalog(session: AsyncSession, tenant_id: uuid.UUID, query: str
         .limit(limit)
     )
     return [(variant, product, category) for variant, product, category in (await session.execute(stmt)).all()]
+
+
+async def browse_catalog(
+    session: AsyncSession, tenant_id: uuid.UUID, *, category_name: str | None = None, limit: int = 100
+) -> list[tuple[Variant, Product, Category | None]]:
+    """Every active variant, optionally narrowed to one category by name --
+    for the bot's browse_catalog tool. search_catalog's literal word match
+    can't answer open-ended questions like "what's on the menu" or "what do
+    you sell", since nothing in a real catalog is ever literally named
+    "menu" or "available" -- this lists everything instead of searching
+    for a term.
+
+    A category_name match expands to that category's whole subtree: a
+    parent like "Beverages" usually holds no products directly (they sit on
+    leaf categories like "Hot Coffee"/"Cold Coffee" underneath it), so
+    matching only the literal category a product is filed under would make
+    "what beverages do you have" return nothing -- exactly the same class of
+    bug this tool exists to fix for product names."""
+    stmt = (
+        select(Variant, Product, Category)
+        .join(Product, Product.id == Variant.product_id)
+        .join(Category, Category.id == Product.category_id, isouter=True)
+        .where(tenant_scope(Variant.tenant_id, tenant_id), Variant.active.is_(True))
+    )
+    if category_name:
+        matching_ids = await _expand_category_subtree_ids(session, tenant_id, category_name)
+        if not matching_ids:
+            return []
+        stmt = stmt.where(Product.category_id.in_(matching_ids))
+    stmt = stmt.order_by(Category.name, Product.name, Variant.name).limit(limit)
+    return [(variant, product, category) for variant, product, category in (await session.execute(stmt)).all()]
+
+
+async def _expand_category_subtree_ids(session: AsyncSession, tenant_id: uuid.UUID, name_query: str) -> set[uuid.UUID]:
+    """All categories whose name matches name_query, plus every descendant
+    of each match -- small tenant-scale category trees, so building it in
+    Python from one flat fetch is simpler than a recursive CTE."""
+    categories = await list_categories(session, tenant_id)
+    children_by_parent: dict[uuid.UUID | None, list[Category]] = {}
+    for c in categories:
+        children_by_parent.setdefault(c.parent_id, []).append(c)
+
+    matched_ids = {c.id for c in categories if name_query.lower() in c.name.lower()}
+    result = set(matched_ids)
+    stack = list(matched_ids)
+    while stack:
+        current_id = stack.pop()
+        for child in children_by_parent.get(current_id, []):
+            if child.id not in result:
+                result.add(child.id)
+                stack.append(child.id)
+    return result

@@ -41,6 +41,11 @@ FALLBACK_REPLY = "Sorry, I'm having trouble responding right now -- please try a
 # matches "$19.99", "$1,299", "$5" -- used by the pricing guardrail below
 _PRICE_PATTERN = re.compile(r"\$\s?\d+(?:,\d{3})*(?:\.\d{1,2})?")
 
+# strips "[variant_id: <uuid>]" -- present in search_catalog/browse_catalog's
+# tool output so the agent can reference an item in update_order/create_lead,
+# but never meant for a customer to actually see
+_VARIANT_ID_SUFFIX_PATTERN = re.compile(r"\s*\[variant_id:[^\]]*\]")
+
 # used by the order-confirmation guardrail below -- catches the LLM telling
 # the customer their order is confirmed/placed in prose without actually
 # having called confirm_order
@@ -79,7 +84,11 @@ async def handle_message(
         )
         messages = result["messages"]
         reply = _last_ai_text(messages)
-        actions = _extract_lead_actions(messages)
+        # `messages` is the whole thread's accumulated history (loaded from
+        # the checkpointer), not just this call's activity -- actions must
+        # only reflect what happened THIS turn, or every reply would keep
+        # re-reporting the same lead_created from turns ago
+        actions = _extract_lead_actions(_this_turn_messages(messages))
         # update_order/confirm_order also state trustworthy prices (unit
         # prices, cart total) computed server-side the same way
         # search_catalog's are -- combine whichever of the three ran this
@@ -88,6 +97,7 @@ async def handle_message(
             out
             for out in (
                 _last_tool_output(messages, "search_catalog"),
+                _last_tool_output(messages, "browse_catalog"),
                 _last_tool_output(messages, "update_order"),
                 _last_tool_output(messages, "confirm_order"),
             )
@@ -127,6 +137,21 @@ def _last_tool_output(messages: list, tool_name: str) -> str | None:
     return None
 
 
+def _this_turn_messages(messages: list) -> list:
+    """`messages` (from agent.ainvoke's result) is the whole thread's
+    accumulated history loaded from the checkpointer, with this turn's new
+    messages appended at the end -- not just what happened in this call.
+    Exactly one new HumanMessage is added per turn, so everything from the
+    last one onward is this turn's own activity. Used for `actions` only --
+    the guardrails below deliberately keep using the full `messages`, since
+    e.g. "was this order ever confirmed" or "what prices have been quoted"
+    should hold across the whole conversation, not reset every turn."""
+    for i in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[i], HumanMessage):
+            return messages[i:]
+    return messages
+
+
 def _extract_lead_actions(messages: list) -> list[BotMessageAction]:
     actions = []
     for message in messages:
@@ -155,7 +180,11 @@ def _apply_pricing_guardrail(reply: str, catalog_output: str | None) -> str:
     catalog_prices = set(_PRICE_PATTERN.findall(catalog_output))
     if reply_prices <= catalog_prices:
         return reply
-    return f"Here's what I found:\n\n{catalog_output}"
+    # the raw tool output is otherwise trustworthy, but it carries internal
+    # [variant_id: ...] tags for the agent's own reference (see bot_tools.py)
+    # that a customer should never see verbatim
+    customer_safe_output = _VARIANT_ID_SUFFIX_PATTERN.sub("", catalog_output)
+    return f"Here's what I found:\n\n{customer_safe_output}"
 
 
 def _apply_order_confirmation_guardrail(reply: str, messages: list) -> str:

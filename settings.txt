@@ -4,4 +4,14 @@
 4. Delivery support
     - Delivery mode
         - Cash on Delivery
-    
+5. Order confirmation by human or bot
+
+Enhancements/TODO
+1. Refresh chat conversations
+2. Payment methods
+3. Add images for products/variants
+4. Agent for summarizing docs
+    - Multi agent
+5. Color for inactive products
+6. Human in the loop for specific scenarios
+    - Negotiations

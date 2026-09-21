@@ -42,6 +42,14 @@ class MissingRequiredContactInfo(ValueError):
         super().__init__(f"missing required contact info: {', '.join(missing_labels)}")
 
 
+class MissingFulfillmentInfo(ValueError):
+    """Raised by confirm_order when the draft order has no `fulfillment`
+    (or no "type") set yet -- the system prompt already tells the agent to
+    ask for delivery/pickup before confirming, but that's prompt-level
+    guidance the agent could still skip; this is the same belt-and-suspenders
+    pattern as MissingRequiredContactInfo, enforcing it server-side too."""
+
+
 async def _price_items(
     session: AsyncSession, tenant_id: uuid.UUID, items: list[dict]
 ) -> tuple[list[dict], Decimal]:
@@ -187,6 +195,9 @@ async def confirm_order(session: AsyncSession, tenant_id: uuid.UUID, conversatio
     missing_fields = await leads_repo.get_missing_required_fields(session, tenant_id, lead_id)
     if missing_fields:
         raise MissingRequiredContactInfo(missing_fields)
+
+    if not order.fulfillment or not order.fulfillment.get("type"):
+        raise MissingFulfillmentInfo()
 
     order.status = OrderStatus.PLACED
     await session.flush()

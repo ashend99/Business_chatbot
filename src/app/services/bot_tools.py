@@ -45,6 +45,17 @@ class OrderItemInput(BaseModel):
     quantity: int = Field(ge=1, description="How many of this item the customer wants.")
 
 
+_FULFILLMENT_LABELS = {"type": "Type", "address": "Address", "time": "Time", "needed_by": "Needed by"}
+
+
+def _format_fulfillment(fulfillment: dict) -> str:
+    # never render the raw dict -- its Python repr (e.g. "{'type':
+    # 'delivery', ...}") is an internal detail that leaked straight into a
+    # customer-facing reply when the pricing/confirmation guardrail fell
+    # back to this tool's own text verbatim
+    return ", ".join(f"{_FULFILLMENT_LABELS.get(k, k.title())}: {v}" for k, v in fulfillment.items())
+
+
 def _format_order_summary(order: Order) -> str:
     lines = [
         f"{item['quantity']}x {item['product_name']}"
@@ -54,7 +65,7 @@ def _format_order_summary(order: Order) -> str:
     ]
     parts = ["\n".join(lines), f"Total: ${order.total}"]
     if order.fulfillment:
-        parts.append(f"Fulfillment: {order.fulfillment}")
+        parts.append(f"Fulfillment: {_format_fulfillment(order.fulfillment)}")
     if order.notes:
         parts.append(f"Notes: {order.notes}")
     return "\n".join(p for p in parts if p)
@@ -72,6 +83,15 @@ def _format_variant_line(variant, product) -> str:
     # matched_variant_id -- without it here, the agent has no way to know
     # a variant's id at all, and that field would always end up empty
     return f"{product.name} - {variant.name}: ${variant.price} ({stock}) [variant_id: {variant.id}]"
+
+
+def _format_catalog_grouped_by_category(rows: list) -> str:
+    groups: dict[str, list[str]] = {}
+    for variant, product, category in rows:
+        groups.setdefault(category.name if category else "Other", []).append(
+            _format_variant_line(variant, product)
+        )
+    return "\n\n".join(f"{name}:\n" + "\n".join(lines) for name, lines in groups.items())
 
 
 def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: ConversationChannel) -> list[StructuredTool]:
@@ -95,12 +115,24 @@ def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: 
         return "\n\n---\n\n".join(doc.content for doc in docs)
 
     async def search_catalog(query: str) -> str:
-        """Search the product/service catalog for pricing and stock information."""
+        """Search the product/service catalog for pricing and stock information about a SPECIFIC named item (e.g. "chicken pizza", "large fried rice"). Returns nothing for open-ended questions like "what do you have" or "what's on the menu" -- use browse_catalog for those instead."""
         async with AsyncSessionLocal() as session:
             rows = await catalog_repo.search_catalog(session, tenant_id, query, limit=5)
         if not rows:
             return "No matching products or services were found in the catalog."
         return "\n".join(_format_variant_line(variant, product) for variant, product, _category in rows)
+
+    async def browse_catalog(category: str | None = None) -> str:
+        """List what's available, grouped by category -- use this for open-ended questions like "what do you have", "what's on the menu", "what do you sell", or when search_catalog finds nothing for a vague request. Pass `category` to narrow to one category (e.g. "beverages", "pizza"), or omit it to list everything."""
+        async with AsyncSessionLocal() as session:
+            rows = await catalog_repo.browse_catalog(session, tenant_id, category_name=category)
+        if not rows:
+            return (
+                f"No items found in the '{category}' category."
+                if category
+                else "The catalog is currently empty."
+            )
+        return _format_catalog_grouped_by_category(rows)
 
     async def create_lead(
         fields: dict, status: Literal["interested", "new"], matched_variant_id: str | None = None
@@ -163,6 +195,9 @@ def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: 
                 await session.rollback()
                 missing = ", ".join(exc.missing_labels)
                 return f"Can't confirm yet -- still need the customer's {missing}. Ask for it, call create_lead with it, then try confirm_order again."
+            except orders_repo.MissingFulfillmentInfo:
+                await session.rollback()
+                return "Can't confirm yet -- ask whether they want delivery or pickup (and any other fulfillment detail like address/time), call update_order with that, then try confirm_order again."
             await session.commit()
 
             tenant = await tenants_repo.get_tenant_by_id(session, tenant_id)
@@ -174,6 +209,7 @@ def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: 
     return [
         StructuredTool.from_function(coroutine=search_documents, name="search_documents"),
         StructuredTool.from_function(coroutine=search_catalog, name="search_catalog"),
+        StructuredTool.from_function(coroutine=browse_catalog, name="browse_catalog"),
         StructuredTool.from_function(coroutine=create_lead, name="create_lead"),
         StructuredTool.from_function(coroutine=update_order, name="update_order"),
         StructuredTool.from_function(coroutine=confirm_order, name="confirm_order"),

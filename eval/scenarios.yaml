@@ -1,0 +1,348 @@
+# Eval scenarios for the bot agent (services/bot_engine.py). Each scenario
+# drives a simulated customer (eval/conversation_agent.py) through a
+# multi-turn chat against the real /bot/message endpoint; eval/eval_agent.py
+# grades the resulting transcript + DB state against `success_criteria`
+# later, separately, so a conversation only needs to be generated once.
+#
+# `persona` is the simulated customer's own system prompt -- write it as
+# instructions to that customer, not a description of them in third person.
+# `success_criteria` is graded by an LLM judge against the transcript, so
+# write it as concrete, checkable behaviors, not vague vibes.
+#
+# IMPORTANT: this platform is multi-tenant and deliberately multi-vertical
+# (restaurants, cake makers, online sellers, ...) -- personas describe
+# customer *behavior*, never a specific tenant's actual catalog items,
+# business type, or business name. The simulated customer is itself an LLM
+# reacting to whatever the real bot actually says, so a persona like "ask
+# what's available, then pick whatever the assistant mentions first" works
+# against any tenant's real catalog/documents without knowing its contents
+# in advance -- unlike naming a specific dish, which only makes sense
+# against one tenant's menu.
+
+scenarios:
+  - id: order_specific_item
+    channel: website_widget
+    persona: >
+      You are a customer of this business's chat assistant. Ask what's
+      available to buy. Once the assistant mentions a specific item, say
+      you'd like to order one of it (pick a specific size/variant if it
+      offers a choice), and ask for it to be delivered to "12 Main St"
+      around 7pm tonight. When asked for your name and phone number, give
+      "Kasun" and "0771234567". Once the bot summarizes your order
+      correctly, confirm it. After it says the order is confirmed, thank
+      them and end the conversation.
+    max_turns: 8
+    success_criteria: >
+      The bot looks up the real catalog price for the item it offered (do
+      not accept an invented price). It asks for delivery details and
+      contact info before confirming. It never tells the customer the order
+      is confirmed until confirm_order has actually succeeded (check the
+      order/lead DB snapshot: an order should exist with status=placed,
+      correct item/quantity, and a linked lead with name+phone). It never
+      mentions collecting payment.
+
+  - id: vague_menu_question
+    channel: website_widget
+    persona: >
+      You are a customer who is not sure what to get. Open with something
+      vague like "what do you have available today?" without naming
+      anything specific. If the bot offers you a list of options, thank
+      them and end the conversation without ordering anything.
+    max_turns: 4
+    success_criteria: >
+      The bot must NOT claim nothing is available. It should list real
+      items that actually exist in the catalog (grouped or not), not a
+      generic apology. No order or lead should be created (the customer
+      never expressed intent to buy).
+
+  - id: category_narrowing
+    channel: website_widget
+    persona: >
+      You are a customer who first asks generally what's available, without
+      naming anything specific. Once the assistant's answer reveals some
+      broad grouping or category of items that actually exist, ask a
+      follow-up naming that category in general terms (e.g. "what drinks do
+      you have?" or "what kinds of X do you offer?", using whatever category
+      the assistant's own answer actually suggested exists -- never guess a
+      category it didn't hint at). After the bot answers that, ask a brief
+      follow-up about one of the listed items' price, then end the
+      conversation without ordering.
+    max_turns: 6
+    success_criteria: >
+      The bot lists real items belonging to that category, not an empty/
+      no-results answer -- since the category was one the assistant itself
+      already indicated exists, an empty/unavailable response here would be
+      a genuine failure, not a case where the category legitimately doesn't
+      exist. The follow-up price it gives must match a real catalog price.
+
+  - id: payment_boundary
+    channel: website_widget
+    persona: >
+      You are a customer ordering one of something specific the assistant
+      offers, for pickup today at 6pm. Follow these steps in order, and do
+      not end the conversation until step 5 is actually done: (1) ask for
+      the item and pickup details; (2) once the assistant is ready to
+      finalize, ask "can I pay you right now with my card?" and see how it
+      responds; (3) say "ok, please confirm it"; (4) if the assistant asks
+      for your name and/or phone number at any point -- including now --
+      give "Nadeesha" and "0779998887" right away, do not skip or delay
+      this; (5) only once the assistant actually says the order is
+      confirmed, thank them and end the conversation. If the assistant asks
+      for anything else you haven't given yet, keep responding and
+      providing it rather than ending early.
+    max_turns: 10
+    success_criteria: >
+      The bot never agrees to take payment, never asks for card/payment
+      details, and never claims a payment was processed -- it should say
+      payment is handled separately by the business. It should still
+      successfully place the order afterward (status=placed in the DB
+      snapshot) once asked to confirm.
+
+  - id: missing_contact_info
+    channel: website_widget
+    persona: >
+      You are a customer who wants to order one of something specific the
+      assistant offers, for pickup at 5:30pm today. When the bot asks for
+      your name or phone number, refuse twice ("I'd rather not share that"
+      / "do you really need it?"). On the third ask, relent and give
+      "Ruwan" and "0765554443", then let it confirm.
+    max_turns: 10
+    success_criteria: >
+      The bot must not confirm the order (no order with status=placed)
+      until it actually has the required contact info -- it should keep
+      asking rather than fabricating or skipping the requirement. Once
+      given, it should successfully confirm (status=placed, correct lead
+      fields).
+
+  - id: faq_question
+    channel: website_widget
+    persona: >
+      You are a customer asking about this business's policies: ask two
+      separate, plausible policy questions a real customer might have (e.g.
+      about delivery/shipping, payment methods, hours, or returns -- pick
+      whatever seems like something this kind of business would have a
+      policy on). Ask them as two separate messages, one at a time. After
+      getting answers, thank them and end the conversation.
+    max_turns: 4
+    success_criteria: >
+      The bot answers using real information from the knowledge base
+      (published documents) where it exists, and does not claim it has no
+      information on something the documents actually cover. No lead or
+      order should be created.
+
+  - id: nonexistent_item
+    channel: website_widget
+    persona: >
+      You are a customer who first asks what's available, then asks for
+      something plausible-sounding that this business almost certainly
+      doesn't actually sell (invent something that sounds like a real
+      product/service category but wasn't mentioned in what the assistant
+      just listed). If told no, ask what they do have instead, then end the
+      conversation without ordering.
+    max_turns: 4
+    success_criteria: >
+      The bot honestly says that specific item isn't available (it must not
+      invent a matching product), and when asked what they do have, it
+      lists real catalog items via browse_catalog rather than repeating
+      that nothing is available.
+
+  - id: multi_item_cart_edit
+    channel: website_widget
+    persona: >
+      You are a customer building an order. First ask what's available and
+      request one unit of the first specific item the assistant mentions.
+      Then say "actually make it 2, and also add one of [a second, different
+      item the assistant has mentioned or now mentions]". Then specify
+      pickup around 6:45pm today, give name "Chamari" and phone
+      "0712223334" when asked, review the order summary the bot gives you,
+      and confirm it if the summary correctly reflects 2 of the first item
+      and 1 of the second.
+    max_turns: 10
+    success_criteria: >
+      The final placed order (check the DB snapshot) contains exactly two
+      line items matching what was actually asked for (2x the first item,
+      1x the second), with a total that is the correct sum of real catalog
+      prices for those quantities. Earlier, wrong cart states (e.g. only 1
+      of the first item, or missing the second) should not have been what
+      got confirmed.
+
+  - id: cart_abandonment
+    channel: website_widget
+    persona: >
+      You are a customer who starts building an order -- ask what's
+      available, say you want one of a specific item the assistant
+      mentions. Then, before ever confirming, change your mind: say
+      something like "actually, never mind, I'll think about it" and end
+      the conversation without confirming anything.
+    max_turns: 6
+    success_criteria: >
+      No order with status=placed should exist for this conversation in the
+      DB snapshot -- a draft order (or none at all) is fine, but the bot
+      must never have confirmed an order the customer explicitly backed out
+      of. The bot should acknowledge the customer changing their mind
+      gracefully, not push them to complete the purchase.
+
+  - id: cart_item_removal
+    channel: website_widget
+    persona: >
+      You are a customer building an order. Ask what's available, then
+      request one unit each of two different specific items the assistant
+      mentions. Then say you changed your mind about the first one and want
+      to remove it, keeping only the second. Once the bot confirms the cart
+      now only has the second item, give name "Sanduni" and phone
+      "0778887776" when asked, specify pickup today around 5pm, and confirm
+      the order.
+    max_turns: 10
+    success_criteria: >
+      The final placed order (check the DB snapshot items) must contain
+      ONLY the second item the customer kept, not the first one they asked
+      to remove, and not both. If the order still contains the removed
+      item, that is a failure.
+
+  - id: double_confirm_idempotency
+    channel: website_widget
+    persona: >
+      You are a customer who orders one of a specific item the assistant
+      mentions, for pickup today, giving name "Nimal" and phone
+      "0761112223" when asked. Once the bot confirms the order, immediately
+      ask it to confirm the order again ("can you confirm that one more
+      time, I want to make sure it went through") before ending the
+      conversation.
+    max_turns: 10
+    success_criteria: >
+      Exactly one order with status=placed should exist in the DB snapshot
+      for this conversation -- the second "confirm again" request must not
+      create a duplicate order or corrupt the existing one. The bot's
+      response to the second request should reassure the customer (e.g.
+      referencing the same order) rather than erroring or behaving
+      strangely.
+
+  - id: compound_question
+    channel: website_widget
+    persona: >
+      You are a customer who asks two unrelated questions in a single
+      message: the price of a specific item you'd like to guess might exist
+      (or ask generally "how much is X" naming something plausible), AND a
+      policy question (e.g. about delivery, payment methods, or hours) --
+      both in one message. See how the assistant handles both, then thank
+      them and end the conversation without ordering.
+    max_turns: 4
+    success_criteria: >
+      The bot addresses both parts of the compound question, not just one
+      -- either answering each with real data (a real catalog price, real
+      document-sourced policy info) or honestly saying it doesn't have that
+      specific information, but it must not silently ignore one half of the
+      question or fabricate an answer to either part.
+
+  - id: ambiguous_item_disambiguation
+    channel: website_widget
+    persona: >
+      You are a customer who asks what's available, then asks to order one
+      of the items the assistant mentioned but WITHOUT specifying which
+      size/variant/option, even if the assistant's listing showed several
+      choices for that item. See how it responds. If it asks you to
+      clarify, pick any one option and continue to confirm the order
+      (giving name "Priyanka" and phone "0723334445", pickup today, when
+      asked); if it just picks one for you without asking, point out you
+      didn't specify and see what it does.
+    max_turns: 10
+    success_criteria: >
+      If the item genuinely has multiple variants/options, the bot should
+      ask which one the customer wants rather than silently guessing. The
+      final order (if one is placed) must reflect a specific, real variant
+      that was actually confirmed by the customer, not an assumed default
+      the customer never agreed to.
+
+  - id: offtopic_midconversation
+    channel: website_widget
+    persona: >
+      You are a customer who starts ordering -- ask what's available and
+      say you want one of a specific item the assistant mentions. Before
+      continuing, send one completely unrelated, slightly odd message (e.g.
+      "random question but what's the weather like where you are?" or
+      similar off-topic small talk). After the bot responds to that, go
+      back to your original order: give name "Kavindu" and phone
+      "0709998887" when asked, specify pickup today, and confirm.
+    max_turns: 10
+    success_criteria: >
+      The bot should handle the off-topic message gracefully (a brief,
+      sensible reply, not an error or a nonsensical tool call) without
+      losing track of the cart -- the final confirmed order should still
+      correctly reflect the item asked for before the off-topic detour, not
+      an empty or corrupted cart.
+
+  - id: discount_negotiation
+    channel: website_widget
+    persona: >
+      You are a customer who asks about a specific item's price, then asks
+      if the business can give you a discount or a better price on it.
+      Whatever it says, thank them and end the conversation without
+      ordering.
+    max_turns: 4
+    success_criteria: >
+      The bot must never invent or agree to a discounted price on its own
+      authority -- it should either say pricing is fixed / it can't offer
+      discounts, or say it will pass the request along to the business, but
+      it must not state a lower price than the item's real catalog price as
+      if it were now the agreed price.
+
+  - id: unknown_policy_question
+    channel: website_widget
+    persona: >
+      You are a customer asking a very specific, somewhat unusual policy
+      question that this business's documents may well not cover -- e.g.
+      what happens if a delivery is very late, whether they price-match a
+      competitor, or something similarly specific and edge-case-y (invent
+      a plausible one). See how the assistant responds, thank them, and end
+      the conversation.
+    max_turns: 4
+    success_criteria: >
+      If the knowledge base doesn't actually cover this question, the bot
+      must say so honestly (e.g. "I don't have that information") rather
+      than inventing a plausible-sounding policy. If the documents genuinely
+      do cover it, the answer must be consistent with real document
+      content, not embellished.
+
+  - id: post_placement_cancel_request
+    channel: website_widget
+    persona: >
+      You are a customer who orders one of a specific item the assistant
+      mentions, for pickup today, giving name "Dilani" and phone
+      "0734445556" when asked, and confirms the order. Immediately after it
+      confirms, say you changed your mind and want to cancel it, or change
+      the item.
+    max_turns: 10
+    success_criteria: >
+      The bot has no tool to cancel or modify an already-placed order, so
+      it must not falsely claim it cancelled/changed the order -- it should
+      say it will pass the request to the business or that they need to
+      follow up directly. The DB snapshot's order should still show
+      status=placed (not silently flipped to cancelled by a fabricated
+      claim) with the original item/quantity unchanged.
+
+  - id: fragmented_contact_info
+    channel: whatsapp
+    persona: >
+      You are a customer messaging over WhatsApp who orders one of a
+      specific item the assistant mentions, for pickup today around 6pm.
+      When asked for your contact details, give ONLY your phone number
+      first ("0745556667"), in its own message. Wait for the assistant's
+      next response, and only then, in a separate later message, give your
+      name ("Isuru"). Then let it confirm the order.
+    max_turns: 10
+    success_criteria: >
+      The final placed order's linked lead (check the DB snapshot) must
+      have BOTH the correct name and phone number captured, even though
+      they were given in two separate messages in reverse order from every
+      other scenario -- the bot must not lose or overwrite either field, and
+      must not confirm the order before both pieces of required contact
+      info were actually captured.
+
+scenarios_meta:
+  # channel variation is covered by fragmented_contact_info using
+  # "whatsapp" instead of "website_widget" above -- every other scenario
+  # exercises website_widget. Channel is just a string the bot treats
+  # uniformly (see architecture_v0.1.md's agent section), so one scenario
+  # on a different channel value is enough to catch a channel-specific
+  # regression without duplicating every scenario per channel.
+  note: see eval/CLAUDE.md for how to add scenarios and run this harness

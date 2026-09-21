@@ -20,6 +20,9 @@ env/
 # uv
 uv.lock.bak
 
+# eval/ harness output -- generated transcripts + judge verdicts, not source
+eval/results/*.json
+
 # Testing / coverage
 .pytest_cache/
 .coverage
