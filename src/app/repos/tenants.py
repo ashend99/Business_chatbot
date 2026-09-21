@@ -121,11 +121,17 @@ async def update_tenant_admin_password(session: AsyncSession, admin: TenantAdmin
 
 
 async def create_invite_token(
-    session: AsyncSession, *, tenant_id: uuid.UUID, expires_in_hours: int = 72
+    session: AsyncSession, *, tenant_id: uuid.UUID, expires_in_hours: int | None = None
 ) -> tuple[InviteTokens, str]:
+    """`expires_in_hours` overrides the configured activation expiry (e.g. the
+    1-hour password-reset links). Previously this argument was accepted but
+    ignored, so every token got the configured expiry regardless."""
     raw_token = generate_raw_token()
     logger.info(f"Generated raw invite token: {raw_token}")
-    expires_in_mins = PROJECT_CONFIG.get("auth").get("tenant").get("activation_token_expire_minutes", 60)
+    if expires_in_hours is not None:
+        expires_in_mins = expires_in_hours * 60
+    else:
+        expires_in_mins = PROJECT_CONFIG.get("auth").get("tenant").get("activation_token_expire_minutes", 60)
     invite = InviteTokens(
         tenant_id=tenant_id,
         token_hash=hash_token(raw_token),

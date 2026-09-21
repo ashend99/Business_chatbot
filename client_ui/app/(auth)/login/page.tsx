@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Field";
+import { Field, Input, PasswordInput } from "@/components/ui/Field";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +13,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
+
+  // Set by /reset-password after a successful reset. Read in an effect (not
+  // useSearchParams) to avoid needing a Suspense boundary around the form.
+  useEffect(() => {
+    setResetDone(new URLSearchParams(window.location.search).get("reset") === "1");
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,6 +55,12 @@ export default function LoginPage() {
         </p>
       </div>
 
+      {resetDone && !error && (
+        <p className="rounded-lg bg-green-50 px-3 py-2 text-[12.5px] text-green-700 dark:bg-green-950/40 dark:text-green-400">
+          Password updated. Sign in with your new password.
+        </p>
+      )}
+
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-[12.5px] text-red-700 dark:bg-red-950/40 dark:text-red-400">
           {error}
@@ -64,8 +77,7 @@ export default function LoginPage() {
         />
       </Field>
       <Field label="Password">
-        <Input
-          type="password"
+        <PasswordInput
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -77,10 +89,12 @@ export default function LoginPage() {
         {pending ? "Signing in…" : "Sign in"}
       </Button>
 
-      <p className="text-center text-[12px] text-text-muted">
-        Forgot your password?{" "}
-        <Link href="/activate" className="text-accent hover:underline">
-          Use your reset link
+      <p className="text-center">
+        <Link
+          href="/forgot-password"
+          className="text-[13px] font-medium text-accent-soft-fg underline underline-offset-2 hover:opacity-80"
+        >
+          Forgot your password?
         </Link>
       </p>
     </form>

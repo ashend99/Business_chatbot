@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { AUTH_COOKIE } from "@/lib/constants";
 
-const PUBLIC_ROUTES = ["/login", "/activate"];
+const PUBLIC_ROUTES = ["/login", "/activate", "/forgot-password", "/reset-password"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_ROUTES.some((p) => pathname === p || pathname.startsWith(`${p}/`));

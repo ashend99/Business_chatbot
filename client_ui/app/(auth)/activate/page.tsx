@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Field, Input } from "@/components/ui/Field";
+import { Field, Input, PasswordInput } from "@/components/ui/Field";
 
 function ActivateFlow() {
   const router = useRouter();
@@ -135,8 +135,7 @@ function ActivateFlow() {
         />
       </Field>
       <Field label="Password">
-        <Input
-          type="password"
+        <PasswordInput
           autoComplete="new-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
@@ -145,8 +144,7 @@ function ActivateFlow() {
         />
       </Field>
       <Field label="Confirm password">
-        <Input
-          type="password"
+        <PasswordInput
           autoComplete="new-password"
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.settings import AdminSettingsUpdate, _validate_currency, _validate_timezone
 
@@ -54,7 +54,7 @@ class RequestPasswordResetRequest(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     token: str
-    password: str
+    password: str = Field(min_length=8)
 
 
 class TenantRead(BaseModel):

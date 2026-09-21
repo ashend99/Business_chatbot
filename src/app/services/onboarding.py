@@ -14,7 +14,8 @@ from utils import from_env
 
 logger = logging.getLogger(__name__)
 
-RESET_URL_TEMPLATE = "https://dashboard.example.com/reset-password?token={token}"
+# used only when CLIENT_DASHBOARD_URL isn't set (local dev)
+DEFAULT_DASHBOARD_URL = "http://localhost:3000"
 
 
 class TenantSuspendedError(ValueError):
@@ -142,14 +143,17 @@ async def request_password_reset(session: AsyncSession, email_sender: EmailSende
         return  # don't reveal whether a username exists
 
     tenant = await tenants_repo.get_tenant_by_id(session, admin.tenant_id)
+    # only the newest reset link should work -- kill any earlier unused ones
+    await tenants_repo.invalidate_pending_invites(session, admin.tenant_id)
     _invite, raw_token = await tenants_repo.create_invite_token(session, tenant_id=admin.tenant_id, expires_in_hours=1)
     await session.commit()
 
     if tenant and tenant.email:
+        dashboard_url = (from_env("CLIENT_DASHBOARD_URL") or DEFAULT_DASHBOARD_URL).rstrip("/")
         mail_subject = PROJECT_CONFIG.email.reset_password_mail.subject
         mail_body = PROJECT_CONFIG.email.reset_password_mail.body.format(
             name=tenant.name,
-            reset_token=raw_token,
+            reset_link=f"{dashboard_url}/reset-password?token={raw_token}",
         )
         email_sender.send(
             to=tenant.email,
