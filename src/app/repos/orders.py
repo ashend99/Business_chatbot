@@ -42,6 +42,34 @@ class MissingRequiredContactInfo(ValueError):
         super().__init__(f"missing required contact info: {', '.join(missing_labels)}")
 
 
+class FulfillmentTypeNotOffered(ValueError):
+    """The chosen fulfillment type (delivery/pickup) isn't one this tenant
+    currently offers (TenantSettings.delivery_enabled/pickup_enabled)."""
+
+    def __init__(self, chosen: str, offered: tuple[str, ...]) -> None:
+        self.chosen = chosen
+        self.offered = offered
+        super().__init__(f"fulfillment type {chosen!r} is not offered; available: {', '.join(offered) or 'none'}")
+
+
+class MissingFulfillmentDetail(ValueError):
+    """The fulfillment type is set but a detail it needs isn't (e.g. a
+    delivery order with no address)."""
+
+    def __init__(self, missing: list[str]) -> None:
+        self.missing = missing
+        super().__init__(f"missing fulfillment detail: {', '.join(missing)}")
+
+
+class BelowMinimumOrder(ValueError):
+    """The cart total is under this tenant's configured minimum order value."""
+
+    def __init__(self, minimum: Decimal, total: Decimal) -> None:
+        self.minimum = minimum
+        self.total = total
+        super().__init__(f"order total {total} is below the minimum order value {minimum}")
+
+
 class MissingFulfillmentInfo(ValueError):
     """Raised by confirm_order when the draft order has no `fulfillment`
     (or no "type") set yet -- the system prompt already tells the agent to
@@ -122,6 +150,7 @@ async def update_order(
     fulfillment: dict | None = None,
     notes: str | None = None,
     source_channel: str | None = None,
+    currency_code: str | None = None,
 ) -> Order:
     """Upsert-by-conversation, full-replace semantics: the agent sends the
     *entire* current cart each call (matching create_lead's fields-dict
@@ -153,6 +182,7 @@ async def update_order(
             status=OrderStatus.DRAFT,
             items=priced_items,
             total=total,
+            currency_code=currency_code,
             fulfillment=fulfillment,
             notes=notes,
             source_channel=source_channel,
@@ -171,17 +201,32 @@ async def update_order(
         order.notes = notes
     if source_channel is not None:
         order.source_channel = source_channel
+    if currency_code is not None and order.currency_code is None:
+        order.currency_code = currency_code
     await session.flush()
     await session.refresh(order)
     return order
 
 
-async def confirm_order(session: AsyncSession, tenant_id: uuid.UUID, conversation_id: uuid.UUID) -> Order:
-    """Moves this conversation's draft order from DRAFT to PLACED -- the
-    handoff point to a human for payment/fulfillment. Raises NoCartToConfirm
-    or MissingRequiredContactInfo instead of returning None so the tool
-    layer can tell the agent exactly what's missing (an empty cart vs. no
-    way to reach the customer), rather than a bare failure."""
+async def confirm_order(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    *,
+    offered_fulfillment_types: tuple[str, ...] = ("delivery", "pickup"),
+    min_order_value: Decimal | None = None,
+    human_confirmation: bool = False,
+) -> Order:
+    """Moves this conversation's draft order out of DRAFT -- the handoff
+    point to a human for payment/fulfillment. To PLACED normally, or to
+    PENDING_CONFIRMATION when the tenant reviews orders by hand
+    (`human_confirmation`). Raises instead of returning None so the tool layer
+    can tell the agent exactly what's missing, rather than a bare failure:
+
+    NoCartToConfirm, MissingRequiredContactInfo (tenant's required lead
+    fields), MissingFulfillmentInfo / FulfillmentTypeNotOffered /
+    MissingFulfillmentDetail (delivery needs an address), BelowMinimumOrder.
+    All enforced here, server-side, not just prompted."""
     await session.execute(select(func.pg_advisory_xact_lock(func.hashtext(str(conversation_id)))))
 
     order = await _get_draft_order(session, tenant_id, conversation_id)
@@ -196,10 +241,19 @@ async def confirm_order(session: AsyncSession, tenant_id: uuid.UUID, conversatio
     if missing_fields:
         raise MissingRequiredContactInfo(missing_fields)
 
-    if not order.fulfillment or not order.fulfillment.get("type"):
+    fulfillment_type = (order.fulfillment or {}).get("type")
+    if not fulfillment_type:
         raise MissingFulfillmentInfo()
+    fulfillment_type = str(fulfillment_type).lower()
+    if fulfillment_type not in offered_fulfillment_types:
+        raise FulfillmentTypeNotOffered(fulfillment_type, offered_fulfillment_types)
+    if fulfillment_type == "delivery" and not (order.fulfillment or {}).get("address"):
+        raise MissingFulfillmentDetail(["address"])
 
-    order.status = OrderStatus.PLACED
+    if min_order_value is not None and order.total < min_order_value:
+        raise BelowMinimumOrder(min_order_value, order.total)
+
+    order.status = OrderStatus.PENDING_CONFIRMATION if human_confirmation else OrderStatus.PLACED
     await session.flush()
     await session.refresh(order)
     return order

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password, hash_token
 from app.models import InviteTokens, Tenant, TenantAdmin
 from app.repos import leads_admin as leads_admin_repo
+from app.repos import settings_admin as settings_admin_repo
 from app.repos import tenants as tenants_repo
 from app.services.email import EmailSender
 from common import PROJECT_CONFIG
@@ -35,6 +36,9 @@ async def onboard_tenant(
     contact_person: str | None = None,
     contact_number: str | None = None,
     address: str | None = None,
+    currency_code: str = "USD",
+    timezone: str = "UTC",
+    admin_settings: dict | None = None,
 ) -> Tenant:
     """
     Onboard a new tenant by creating the tenant record, generating an invite token,
@@ -67,6 +71,15 @@ async def onboard_tenant(
     # schema to work with immediately -- clients edit/add/remove later via
     # PUT /tenant/lead-field-defs
     await leads_admin_repo.seed_default_lead_field_defs(session, tenant.id)
+    # admin-set settings (currency, entitlements, channels, model) + the
+    # tenant's own starting settings -- see models/settings.py for the split
+    await settings_admin_repo.create_default_settings(
+        session,
+        tenant.id,
+        currency_code=currency_code,
+        timezone=timezone,
+        **(admin_settings or {}),
+    )
     await session.commit()
 
     mail_subject = PROJECT_CONFIG.email.onboard_mail.subject

@@ -26,6 +26,14 @@ router = APIRouter(
 )
 
 
+def _admin_overrides(payload: TenantCreate) -> dict:
+    """The optional admin_settings block minus currency (already a required
+    top-level field of TenantCreate) as kwargs for create_default_settings."""
+    overrides = payload.admin_settings.model_dump(exclude_unset=True) if payload.admin_settings else {}
+    overrides.pop("currency_code", None)
+    return overrides
+
+
 @router.post("", response_model=TenantRead, status_code=status.HTTP_201_CREATED)
 async def create_tenant(payload: TenantCreate, session: AsyncSession = Depends(get_db_session)) -> TenantRead:
     try:
@@ -38,6 +46,9 @@ async def create_tenant(payload: TenantCreate, session: AsyncSession = Depends(g
             contact_person=payload.contact_person,
             contact_number=payload.contact_number,
             address=payload.address,
+            currency_code=payload.currency_code,
+            timezone=payload.timezone,
+            admin_settings=_admin_overrides(payload),
         )
     except IntegrityError as exc:
         await session.rollback()

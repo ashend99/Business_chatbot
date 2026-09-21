@@ -43,11 +43,17 @@ export function fromDateTimeInput(value: string): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-export function formatMoney(value: string | null): string {
+/** `currency` is the tenant's admin-set ISO code (see CurrencyProvider) or an
+ * order's own snapshotted `currency_code`. */
+export function formatMoney(value: string | null, currency = "USD"): string {
   if (value == null || value === "") return "—";
   const n = Number(value);
   if (Number.isNaN(n)) return value;
-  return n.toLocaleString(LOCALE, { style: "currency", currency: "USD" });
+  try {
+    return n.toLocaleString(LOCALE, { style: "currency", currency });
+  } catch {
+    return `${currency} ${n.toFixed(2)}`; // unknown/invalid ISO code
+  }
 }
 
 export function initials(name: string): string {

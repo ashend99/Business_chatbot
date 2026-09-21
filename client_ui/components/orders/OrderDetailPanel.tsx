@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { useCurrency } from "@/components/CurrencyProvider";
 import { OrderStatusBadge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -25,6 +26,7 @@ export function OrderDetailPanel({
   onChanged: () => void;
 }) {
   const confirm = useConfirm();
+  const tenantCurrency = useCurrency();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -82,6 +84,7 @@ export function OrderDetailPanel({
     }
   }
 
+  const currency = order?.currency_code ?? tenantCurrency;
   const leadEntries = order ? Object.entries(order.lead_fields) : [];
   const fulfillmentEntries = order?.fulfillment ? Object.entries(order.fulfillment) : [];
 
@@ -90,11 +93,26 @@ export function OrderDetailPanel({
       <div className="flex items-center justify-between border-b border-border-subtle px-5 py-3.5">
         <div className="flex min-w-0 items-center gap-2.5">
           <span className="truncate text-[13.5px] font-semibold text-text-primary">
-            {order ? formatMoney(order.total) : "Order"}
+            {order ? formatMoney(order.total, currency) : "Order"}
           </span>
           {order && <OrderStatusBadge status={order.status} />}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          {order?.status === "pending_confirmation" && (
+            <>
+              <Button size="sm" onClick={() => setStatus("placed")} disabled={busy !== null}>
+                {busy === "placed" ? "Saving…" : "Confirm order"}
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setStatus("cancelled", "Reject this order? The customer will not be notified automatically.")}
+                disabled={busy !== null}
+              >
+                Reject
+              </Button>
+            </>
+          )}
           {order?.status === "placed" && (
             <>
               <Button size="sm" onClick={() => setStatus("completed")} disabled={busy !== null}>
@@ -161,7 +179,7 @@ export function OrderDetailPanel({
                         )}
                       </td>
                       <td className="px-3 py-2 text-right text-[12.5px] text-text-secondary">
-                        {formatMoney(item.line_total)}
+                        {formatMoney(item.line_total, currency)}
                       </td>
                     </tr>
                   ))}
@@ -170,7 +188,7 @@ export function OrderDetailPanel({
             </div>
             <div className="mt-2 flex justify-between px-1 text-[13px] font-semibold text-text-primary">
               <span>Total</span>
-              <span>{formatMoney(order.total)}</span>
+              <span>{formatMoney(order.total, currency)}</span>
             </div>
           </div>
 

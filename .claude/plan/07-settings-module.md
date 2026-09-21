@@ -1,3 +1,7 @@
+> **Superseded.** This is the original Phase 7 plan (written for the old intent-router). What was
+> actually built — admin-settable vs tenant-settable settings, the resolver, prompt/tool filtering —
+> is described in [architecture_v0.1.md](../../architecture_v0.1.md) §5.
+
 # Phase 7 — Settings Module (Bot Config, Branding, Toggles, Keys)
 
 ## Goal

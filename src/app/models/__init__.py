@@ -4,6 +4,7 @@ from .conversations import Conversation, ConversationChannel, ConversationStatus
 from .documents import ContentSource, Document, DocumentChunk, DocumentStatus
 from .leads import Lead, LeadFieldDef, LeadFieldType, LeadStatus
 from .orders import Order, OrderStatus
+from .settings import BotTone, NegotiationMode, OrderConfirmationMode, TenantAdminSettings, TenantSettings
 from .tenants import (
     ApiKeyTypes,
     ChannelConnections,
@@ -43,4 +44,9 @@ __all__ = [
     "LeadFieldType",
     "Order",
     "OrderStatus",
+    "BotTone",
+    "NegotiationMode",
+    "OrderConfirmationMode",
+    "TenantAdminSettings",
+    "TenantSettings",
 ]

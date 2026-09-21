@@ -92,6 +92,14 @@ points `script_location` at `database/alembic`).
   LLM judge — see `eval/eval_agent.py`'s documented bias and treat
   `fail`/`partial` verdicts as a prompt to go read the transcript, not as
   ground truth.
+- **Per-tenant behavior belongs in settings, not code or prompts.** Two
+  write-separated tables (admin-set vs tenant-set), read only through
+  `services/settings_resolver.py`; the bot must never import a settings write
+  module. New tenant-facing knobs: add the column, the field to exactly one of
+  `TenantSettingsUpdate`/`AdminSettingsUpdate` (both `extra="forbid"`), the
+  resolver field, and — if it changes bot behavior — a `settings:` eval
+  scenario. Settings written from another process (scripts, eval) must go
+  through the API, or the running server's 30s cache won't see them.
 - **Don't hardcode one tenant's business into shared code, prompts, or
   test data.** This platform is explicitly multi-vertical (see the
   Leads/Orders design discussion in git history / architecture doc) —

@@ -42,6 +42,18 @@ customer is itself an LLM reacting to the real transcript, so
 behavior-described personas work against any tenant's actual
 catalog/documents without knowing their contents in advance.
 
+## Settings overrides
+
+A scenario can include `settings: {tenant: {...}, admin: {...}}` — the harness
+applies them via the real APIs (tenant login + superadmin login, using
+`EVAL_TENANT_USERNAME`/`EVAL_TENANT_PASSWORD` and `SUPERADMIN_EMAIL`/
+`SUPERADMIN_PASSWORD` from `.env`) before the run and restores the previous
+values afterwards (`lib.SettingsOverride`). It goes through the API on purpose:
+a direct DB write from this process wouldn't invalidate the running server's
+settings cache. Saved results record the overrides and the business's local
+date/time, and the judge is told about both. A rejected message (e.g. HTTP 403
+for a disallowed channel) is recorded as a transcript turn, not a crash.
+
 ## The judge's known bias
 
 `gpt-4o` can claim an order "wasn't really confirmed" while quoting its own

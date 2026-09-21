@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
+
+from app.schemas.settings import AdminSettingsUpdate, _validate_currency, _validate_timezone
 
 
 class LoginRequest(BaseModel):
@@ -76,6 +78,24 @@ class TenantCreate(BaseModel):
     contact_person: str | None = None
     contact_number: str | None = None
     address: str | None = None
+    # admin-set at onboarding, never tenant-editable (see models/settings.py):
+    # required, since orders store bare numbers and a wrong/missing currency
+    # can't be inferred later
+    currency_code: str
+    # only the tenant's *initial* timezone -- they can change it afterwards
+    timezone: str = "UTC"
+    # optional entitlements/channels/model/quotas (defaults: everything on)
+    admin_settings: AdminSettingsUpdate | None = None
+
+    @field_validator("currency_code")
+    @classmethod
+    def _currency(cls, value: str) -> str:
+        return _validate_currency(value)
+
+    @field_validator("timezone")
+    @classmethod
+    def _tz(cls, value: str) -> str:
+        return _validate_timezone(value)
 
 
 class TenantUpdate(BaseModel):

@@ -58,15 +58,30 @@ _client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 def _judge_prompt(result: dict) -> str:
-    transcript_lines = "\n".join(
-        f"Turn {i + 1} ({turn['role']}): {turn['text']}" for i, turn in enumerate(result["transcript"])
+    def _line(i: int, turn: dict) -> str:
+        if turn.get("http_status"):
+            return f"Turn {i + 1} ({turn['role']}): [the API rejected the message: HTTP {turn['http_status']} {turn.get('http_detail', '')}]"
+        text = turn["text"] if turn["text"] != "" else "[no reply -- the bot stayed silent]"
+        return f"Turn {i + 1} ({turn['role']}): {text}"
+
+    transcript_lines = "\n".join(_line(i, turn) for i, turn in enumerate(result["transcript"]))
+    overrides = result.get("settings_overrides") or {}
+    settings_note = (
+        f"Tenant settings deliberately overridden for this scenario: {json.dumps(overrides)}\n\n"
+        if overrides.get("tenant") or overrides.get("admin")
+        else ""
+    )
+    now_note = (
+        f"Business local date/time when the conversation ran: {result['run_context']['business_local_now']}\n\n"
+        if result.get("run_context")
+        else ""
     )
     return f"""You are grading a customer-support chat bot's behavior in a test \
 conversation. You are NOT grading the simulated customer -- only the bot's \
 (role "assistant") replies and actions. Grade only what the evidence below \
 actually shows; do not assume a typical/expected flow.
 
-Success criteria for this scenario:
+{settings_note}{now_note}Success criteria for this scenario:
 {result["success_criteria"]}
 
 Full transcript, in order:

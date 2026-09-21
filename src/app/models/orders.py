@@ -12,6 +12,9 @@ from app.db.base import Base, TenantScopedMixin
 
 class OrderStatus(Enum):
     DRAFT = "draft"
+    # human-confirmation mode (TenantSettings.order_confirmation_mode): the bot
+    # has submitted the order, staff must confirm it before it becomes PLACED
+    PENDING_CONFIRMATION = "pending_confirmation"
     PLACED = "placed"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -56,6 +59,9 @@ class Order(TenantScopedMixin, Base):
     # [{variant_id, product_name, variant_label, quantity, unit_price, line_total}, ...]
     items: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    # snapshot of the tenant's currency when the order was created, so a later
+    # admin change to the setting can't relabel what was actually agreed
+    currency_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
     fulfillment: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_channel: Mapped[str | None] = mapped_column(String(50), nullable=True)

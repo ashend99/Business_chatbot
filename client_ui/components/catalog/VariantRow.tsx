@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { useCurrency } from "@/components/CurrencyProvider";
+
 import { PencilIcon, TrashIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -48,6 +50,7 @@ export function VariantRow({
   onChange: (v: Variant) => void;
   onDelete: (id: string) => void;
 }) {
+  const currency = useCurrency();
   const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(variant.name);
@@ -175,7 +178,7 @@ export function VariantRow({
           ))}
       </div>
       <span className="text-[12.5px] text-text-muted">{variant.sku || "—"}</span>
-      <span className="text-[12.5px] text-text-primary">{formatMoney(variant.price)}</span>
+      <span className="text-[12.5px] text-text-primary">{formatMoney(variant.price, currency)}</span>
       <div>
         <span
           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${STOCK_BADGE[variant.stock_status]}`}

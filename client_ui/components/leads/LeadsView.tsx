@@ -3,6 +3,7 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useRef } from "react";
 
+import { useCurrency } from "@/components/CurrencyProvider";
 import { LeadDetailPanel } from "@/components/leads/LeadDetailPanel";
 import { LeadStatusBadge } from "@/components/ui/Badge";
 import { CalendarIcon, ChevronDownIcon, SearchIcon } from "@/components/icons";
@@ -35,6 +36,7 @@ export function LeadsView({
   total: number;
   page: number;
 }) {
+  const currency = useCurrency();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -177,7 +179,7 @@ export function LeadsView({
                         <LeadStatusBadge status={lead.status} />
                       </td>
                       <td className="px-5 py-3 text-[12.5px] text-text-primary">
-                        {formatMoney(lead.deal_value)}
+                        {formatMoney(lead.deal_value, currency)}
                       </td>
                       <td
                         className="px-5 py-3 text-[12px] text-text-muted"

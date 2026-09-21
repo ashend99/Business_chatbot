@@ -11,12 +11,14 @@ from psycopg.rows import dict_row
 from app.api.auth.router import router as auth_router
 from app.api.bot.router import router as bot_router
 from app.api.superadmin.auth import router as superadmin_auth_router
+from app.api.superadmin.settings import router as superadmin_settings_router
 from app.api.superadmin.tenants import router as superadmin_tenants_router
 from app.api.tenant.catalog import router as tenant_catalog_router
 from app.api.tenant.conversations import router as tenant_conversations_router
 from app.api.tenant.documents import router as tenant_documents_router
 from app.api.tenant.leads import router as tenant_leads_router
 from app.api.tenant.orders import router as tenant_orders_router
+from app.api.tenant.settings import router as tenant_settings_router
 from app.components.rag import get_rag
 from app.core.config import settings
 from common import configure_logging
@@ -81,10 +83,12 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(superadmin_auth_router)
 app.include_router(superadmin_tenants_router)
+app.include_router(superadmin_settings_router)
 app.include_router(tenant_documents_router)
 app.include_router(tenant_catalog_router)
 app.include_router(tenant_leads_router)
 app.include_router(tenant_orders_router)
+app.include_router(tenant_settings_router)
 app.include_router(tenant_conversations_router)
 app.include_router(bot_router)
 

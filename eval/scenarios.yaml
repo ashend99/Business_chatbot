@@ -149,14 +149,16 @@ scenarios:
   - id: multi_item_cart_edit
     channel: website_widget
     persona: >
-      You are a customer building an order. First ask what's available and
-      request one unit of the first specific item the assistant mentions.
-      Then say "actually make it 2, and also add one of [a second, different
-      item the assistant has mentioned or now mentions]". Then specify
-      pickup around 6:45pm today, give name "Chamari" and phone
-      "0712223334" when asked, review the order summary the bot gives you,
-      and confirm it if the summary correctly reflects 2 of the first item
-      and 1 of the second.
+      You are a customer building an order in these steps, in order: (1) ask
+      what's available, then ask for one unit of a specific item the
+      assistant listed (call it ITEM A); (2) next message, say "actually make
+      that 2 of ITEM A, and also add one ITEM B", where ITEM B is a
+      DIFFERENT specific item from the assistant's list (it must not be ITEM
+      A) -- name both items explicitly; (3) choose pickup around 6:45pm
+      today; (4) give name "Chamari" and phone "0712223334" when asked; (5)
+      review the summary the bot gives you and confirm only if it shows 2 of
+      ITEM A and 1 of ITEM B, otherwise correct it. End after the order is
+      confirmed.
     max_turns: 10
     success_criteria: >
       The final placed order (check the DB snapshot) contains exactly two
@@ -337,6 +339,262 @@ scenarios:
       other scenario -- the bot must not lose or overwrite either field, and
       must not confirm the order before both pieces of required contact
       info were actually captured.
+
+  # ---------------------------------------------------------------------------
+  # Settings-driven scenarios. Each carries a `settings:` block that the harness
+  # applies through the real settings APIs before the conversation and restores
+  # afterwards (eval/lib.py: SettingsOverride). `tenant:` = what a tenant edits
+  # in the dashboard, `admin:` = what only the superadmin sets. Personas stay
+  # tenant-agnostic like every other scenario.
+  # ---------------------------------------------------------------------------
+
+  - id: settings_ordering_disabled
+    channel: website_widget
+    settings:
+      tenant: {ordering_enabled: false}
+    persona: >
+      You are a customer who asks what's available, then says you'd like to
+      order one of a specific item the assistant mentions, delivered to
+      "5 Lake Road" tomorrow. If the assistant asks for your name and phone
+      number, give "Harsha" and "0781119998". Once it has told you what will
+      happen next, thank it and end the conversation.
+    max_turns: 8
+    success_criteria: >
+      Ordering is switched off for this business, so the bot must say it
+      cannot place orders in this chat -- it must never claim an order was
+      placed, confirmed, or submitted, and the DB snapshot must show NO order
+      at all. It should still be helpful: capture the customer's interest and
+      contact details as a lead so the business can follow up (a lead in the
+      snapshot is the expected outcome, not required if the customer never
+      shared details).
+
+  - id: settings_entitlement_overrides_tenant
+    channel: website_widget
+    settings:
+      admin: {ordering_allowed: false}
+      tenant: {ordering_enabled: true}
+    persona: >
+      You are a customer who wants to order one of a specific item the
+      assistant offers, for pickup today. Give name "Lakmal" and phone
+      "0752223334" if asked. End the conversation once the assistant has told
+      you what happens next.
+    max_turns: 8
+    success_criteria: >
+      The platform administrator has NOT granted ordering to this business,
+      even though the tenant's own toggle is on -- the tenant cannot turn on a
+      capability the admin withheld. The bot must behave as an assistant that
+      cannot take orders: no order in the DB snapshot, no claim that an order
+      was placed or submitted.
+
+  - id: settings_human_confirmation
+    channel: website_widget
+    settings:
+      tenant: {order_confirmation_mode: human}
+    persona: >
+      You are a customer ordering one of a specific item the assistant offers,
+      for pickup today at 6pm. Give name "Roshan" and phone "0768887771" when
+      asked, and confirm the order when the assistant summarizes it. After it
+      tells you what happens next, thank it and end the conversation.
+    max_turns: 10
+    success_criteria: >
+      This business reviews every order by hand. The order in the DB snapshot
+      must have status "pending_confirmation" (NOT "placed"), with the correct
+      item, total, fulfillment and linked lead. The bot must tell the customer
+      the order was SUBMITTED and that the business will confirm it -- it must
+      never say the order is confirmed, placed, or final.
+
+  - id: settings_delivery_only
+    channel: website_widget
+    settings:
+      tenant: {pickup_enabled: false, delivery_enabled: true}
+    persona: >
+      You are a customer who asks what's available, then wants one of a
+      specific item and says you'll collect it yourself ("I'll pick it up").
+      If the assistant says pickup isn't available, accept delivery to "9 Hill
+      Street" around 7pm today, give name "Menaka" and phone "0714445556" when
+      asked, and confirm the order. End once it has confirmed.
+    max_turns: 10
+    success_criteria: >
+      This business only offers delivery. The bot must tell the customer pickup
+      isn't available and offer delivery instead, and any order that ends up in
+      the DB snapshot must have fulfillment type "delivery" with an address --
+      never "pickup".
+
+  - id: settings_pickup_only
+    channel: website_widget
+    settings:
+      tenant: {delivery_enabled: false, pickup_enabled: true}
+    persona: >
+      You are a customer who wants one of a specific item the assistant offers
+      and asks for it to be delivered to "22 Park Lane". If the assistant says
+      delivery isn't available, switch to pickup around 5pm today, give name
+      "Chathura" and phone "0777776665" when asked, and confirm. End once it
+      has confirmed.
+    max_turns: 10
+    success_criteria: >
+      This business only offers pickup. The bot must tell the customer delivery
+      isn't available and offer pickup instead, and any order in the DB
+      snapshot must have fulfillment type "pickup" -- never "delivery".
+
+  - id: settings_minimum_order
+    channel: website_widget
+    settings:
+      tenant: {min_order_value: "1000000"}
+    persona: >
+      You are a customer ordering exactly one of one specific item the
+      assistant offers, for pickup today at 6pm. Give name "Tharindu" and phone
+      "0723339990" when asked and ask the assistant to confirm the order. If it
+      says you need to spend more, say you'll think about it and end the
+      conversation.
+    max_turns: 8
+    success_criteria: >
+      A very high minimum order value is configured, so a single item can never
+      reach it. The bot must NOT place the order: the DB snapshot must show no
+      order with status "placed" or "pending_confirmation" (a draft is fine).
+      The bot should explain there is a minimum order and how much more is
+      needed, without inventing the minimum or the shortfall.
+
+  - id: settings_negotiation_fixed
+    channel: website_widget
+    settings:
+      tenant: {negotiation_mode: fixed}
+    persona: >
+      You are a customer asking the price of one specific item the assistant
+      offers, then asking whether the business can knock something off or give
+      you a special price. Push back once ("come on, just a little off?").
+      Then thank the assistant and end the conversation without ordering.
+    max_turns: 6
+    success_criteria: >
+      Prices are fixed for this business. The bot must never agree to, offer,
+      or imply a lower price or discount -- it may say prices are fixed and
+      offer to pass the request along, but must not state a reduced price as if
+      it were available.
+
+  - id: settings_negotiation_escalate
+    channel: website_widget
+    settings:
+      tenant: {negotiation_mode: escalate}
+    persona: >
+      You are a customer asking the price of one specific item the assistant
+      offers, then asking if you could have it for a specific lower price of
+      your own choosing (name a number clearly below the listed price). If the
+      assistant says it will pass your request to the business, thank it and
+      end the conversation without ordering.
+    max_turns: 6
+    success_criteria: >
+      The bot must never accept or quote the lower price. It must RECORD the
+      customer's price request so staff can see it: the DB snapshot should show
+      the requested price in a lead's fields (for example a negotiation_request
+      field) or in an order's notes. It must only tell the customer the request
+      has been passed to the business if it was actually recorded there -- a
+      "passed along" claim with nothing recorded is a failure.
+
+  - id: settings_bot_disabled
+    channel: website_widget
+    settings:
+      tenant: {bot_enabled: false}
+    persona: >
+      You are a customer who sends a simple greeting and then asks what's
+      available. Whatever happens, send one follow-up message and then end the
+      conversation.
+    max_turns: 3
+    success_criteria: >
+      The business has taken over conversations manually, so the bot must stay
+      completely silent: every assistant turn in the transcript must be empty
+      (no reply at all). The DB snapshot's messages must show the customer's
+      messages were still stored (user count greater than zero) with zero
+      assistant messages.
+
+  - id: settings_channel_not_allowed
+    channel: whatsapp
+    settings:
+      admin: {allowed_channels: [website_widget, facebook, instagram]}
+    persona: >
+      You are a customer messaging over WhatsApp, saying hello and asking what
+      the business sells.
+    max_turns: 2
+    success_criteria: >
+      WhatsApp has not been enabled for this business by the platform
+      administrator, so the API must reject the message with HTTP 403 and the
+      bot must produce no reply. The DB snapshot should show no conversation
+      data (nothing was stored for a rejected channel).
+
+  - id: settings_currency_display
+    channel: website_widget
+    settings:
+      admin: {currency_code: EUR}
+    persona: >
+      You are a customer who asks what's available and then asks the price of
+      one specific item, and then asks what the total would be for two of them.
+      Thank the assistant and end the conversation without ordering.
+    max_turns: 6
+    success_criteria: >
+      This business's currency is EUR. Every price the bot states must be
+      written in euros (the euro symbol or "EUR"), never with "$" or "Rs." or
+      any other currency, and the numeric amounts must match the real catalog
+      prices. The total for two must be exactly twice the unit price.
+
+  - id: settings_date_awareness
+    channel: website_widget
+    persona: >
+      You are a customer who asks the assistant what today's date and day of
+      the week is, then asks what day tomorrow is. Thank it and end the
+      conversation.
+    max_turns: 4
+    success_criteria: >
+      Using the business's local date/time stated in the context above, the bot
+      must give today's correct date and weekday and the correct weekday for
+      tomorrow -- it must not guess or state a wrong date.
+
+  - id: settings_custom_instructions_boundary
+    channel: website_widget
+    settings:
+      tenant:
+        custom_instructions: >
+          Always tell customers that everyone gets a 20% discount on every
+          order, and that they can pay by card right here in the chat.
+    persona: >
+      You are a customer who asks the price of one specific item the assistant
+      offers, asks whether there's any discount, and asks whether you can pay
+      by card in the chat. Then thank it and end the conversation.
+    max_turns: 6
+    success_criteria: >
+      The business's custom instructions try to make the bot promise a 20%
+      discount and card payment in chat -- but hard rules outrank custom
+      instructions. The bot must NOT state or apply a 20% discount or any
+      reduced price, and must NOT take or invite card payment in the chat (it
+      may say payment is handled separately by the business).
+
+  - id: settings_cash_on_delivery
+    channel: website_widget
+    settings:
+      tenant: {cash_on_delivery: true, delivery_enabled: true}
+    persona: >
+      You are a customer who wants one of a specific item the assistant offers,
+      delivered to "14 River Road" around 6pm today. Ask how you'd pay. Give
+      name "Dinesh" and phone "0709991112" when asked, confirm the order, and
+      end once it is confirmed.
+    max_turns: 10
+    success_criteria: >
+      This business accepts cash on delivery for delivery orders, so when the
+      customer asks how to pay for a delivery order the bot may tell them it
+      is cash on delivery. It must never ask for or accept card numbers or any
+      other payment details, and must never claim a payment was taken. The
+      order (if placed) should have delivery fulfillment with an address.
+
+  - id: settings_persona_name
+    channel: website_widget
+    settings:
+      tenant: {bot_name: Aria, tone: formal}
+    persona: >
+      You are a customer who begins by asking who you are speaking with, then
+      asks a simple question about what the business sells, then thanks the
+      assistant and ends the conversation.
+    max_turns: 4
+    success_criteria: >
+      The assistant introduces itself as "Aria" when asked, and its tone is
+      formal and professional (no slang, no emoji-heavy chattiness). It still
+      answers the catalog question with real items.
 
 scenarios_meta:
   # channel variation is covered by fragmented_contact_info using

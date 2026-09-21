@@ -17,7 +17,8 @@ questions do trigger.
 
 import json
 import uuid
-from typing import Literal
+from collections.abc import Awaitable, Callable
+from typing import Any, Literal
 
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
@@ -33,7 +34,10 @@ from app.repos import leads as leads_repo
 from app.repos import orders as orders_repo
 from app.repos import tenants as tenants_repo
 from app.services.email import get_email_sender
+from app.services.money import format_money
 from app.services.notifications import notify_new_lead, notify_new_order
+from app.services.prompt_builder import enabled_tool_names
+from app.services.settings_resolver import EffectiveSettings
 from common import PROJECT_CONFIG
 
 _agent_config = PROJECT_CONFIG.get("agent", {})
@@ -56,14 +60,14 @@ def _format_fulfillment(fulfillment: dict) -> str:
     return ", ".join(f"{_FULFILLMENT_LABELS.get(k, k.title())}: {v}" for k, v in fulfillment.items())
 
 
-def _format_order_summary(order: Order) -> str:
+def _format_order_summary(order: Order, currency_code: str) -> str:
     lines = [
         f"{item['quantity']}x {item['product_name']}"
         + (f" ({item['variant_label']})" if item.get("variant_label") else "")
-        + f" - ${item['unit_price']} each = ${item['line_total']}"
+        + f" - {format_money(item['unit_price'], currency_code)} each = {format_money(item['line_total'], currency_code)}"
         for item in order.items
     ]
-    parts = ["\n".join(lines), f"Total: ${order.total}"]
+    parts = ["\n".join(lines), f"Total: {format_money(order.total, currency_code)}"]
     if order.fulfillment:
         parts.append(f"Fulfillment: {_format_fulfillment(order.fulfillment)}")
     if order.notes:
@@ -71,7 +75,7 @@ def _format_order_summary(order: Order) -> str:
     return "\n".join(p for p in parts if p)
 
 
-def _format_variant_line(variant, product) -> str:
+def _format_variant_line(variant, product, currency_code: str) -> str:
     if variant.stock_status == StockStatus.OUT_OF_STOCK:
         stock = variant.stock_message or "out of stock"
     elif variant.stock_status == StockStatus.UNLIMITED:
@@ -82,19 +86,29 @@ def _format_variant_line(variant, product) -> str:
     # variant_id is included so create_lead can be called with
     # matched_variant_id -- without it here, the agent has no way to know
     # a variant's id at all, and that field would always end up empty
-    return f"{product.name} - {variant.name}: ${variant.price} ({stock}) [variant_id: {variant.id}]"
+    return f"{product.name} - {variant.name}: {format_money(variant.price, currency_code)} ({stock}) [variant_id: {variant.id}]"
 
 
-def _format_catalog_grouped_by_category(rows: list) -> str:
+def _format_catalog_grouped_by_category(rows: list, currency_code: str) -> str:
     groups: dict[str, list[str]] = {}
     for variant, product, category in rows:
         groups.setdefault(category.name if category else "Other", []).append(
-            _format_variant_line(variant, product)
+            _format_variant_line(variant, product, currency_code)
         )
     return "\n\n".join(f"{name}:\n" + "\n".join(lines) for name, lines in groups.items())
 
 
-def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: ConversationChannel) -> list[StructuredTool]:
+def build_tools(
+    tenant_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    channel_type: ConversationChannel,
+    settings: EffectiveSettings,
+) -> list[StructuredTool]:
+    """Only the tools this tenant's effective settings allow -- the same
+    list (prompt_builder.enabled_tool_names) the system prompt describes, so
+    the prompt and the toolset can't disagree."""
+    currency = settings.currency_code
+
     async def search_documents(query: str) -> str:
         """Search the business's knowledge base (policies, FAQs, general info) for an answer to an informational question."""
         # get_rag().retrieve() embeds the query itself, once -- no separate
@@ -120,7 +134,7 @@ def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: 
             rows = await catalog_repo.search_catalog(session, tenant_id, query, limit=5)
         if not rows:
             return "No matching products or services were found in the catalog."
-        return "\n".join(_format_variant_line(variant, product) for variant, product, _category in rows)
+        return "\n".join(_format_variant_line(variant, product, currency) for variant, product, _category in rows)
 
     async def browse_catalog(category: str | None = None) -> str:
         """List what's available, grouped by category -- use this for open-ended questions like "what do you have", "what's on the menu", "what do you sell", or when search_catalog finds nothing for a vague request. Pass `category` to narrow to one category (e.g. "beverages", "pizza"), or omit it to list everything."""
@@ -132,7 +146,7 @@ def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: 
                 if category
                 else "The catalog is currently empty."
             )
-        return _format_catalog_grouped_by_category(rows)
+        return _format_catalog_grouped_by_category(rows, currency)
 
     async def create_lead(
         fields: dict, status: Literal["interested", "new"], matched_variant_id: str | None = None
@@ -158,14 +172,20 @@ def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: 
             if became_new:
                 tenant = await tenants_repo.get_tenant_by_id(session, tenant_id)
                 if tenant is not None:
-                    await notify_new_lead(get_email_sender(), tenant, lead)
+                    await notify_new_lead(get_email_sender(), tenant, lead, settings)
 
         return json.dumps({"lead_id": str(lead.id), "status": lead.status.value})
 
     async def update_order(
         items: list[OrderItemInput], fulfillment: dict | None = None, notes: str | None = None
     ) -> str:
-        """Set the customer's current cart to exactly these items -- always pass the *entire* cart as it should be now (not just what changed), since this replaces the previous cart rather than adding to it. Call this as soon as the customer names specific items they want, and again any time the cart changes (quantity edits, added/removed items, fulfillment details). `fulfillment` should describe how the order reaches the customer once known, e.g. {"type": "delivery", "address": "...", "needed_by": "..."} or {"type": "pickup", "time": "..."} -- omit until you know it. Prices and the total are computed from the real catalog, never invent them yourself."""
+        """Set the customer's current cart to exactly these items -- always pass the *entire* cart as it should be now (not just what changed), since this replaces the previous cart rather than adding to it. Call this as soon as the customer names specific items they want, and again any time the cart changes (quantity edits, added/removed items, fulfillment details). `fulfillment` should describe how the order reaches the customer once known, e.g. {"type": "delivery", "address": "...", "needed_by": "..."} or {"type": "pickup", "time": "..."} -- omit until you know it. `notes` is for special instructions (or a price request you're passing along, if your instructions say so). Prices and the total are computed from the real catalog, never invent them yourself."""
+        chosen_type = str((fulfillment or {}).get("type") or "").lower()
+        if chosen_type and chosen_type not in settings.fulfillment_types:
+            # reject up front rather than storing an order this business
+            # can't fulfil that way (confirm_order enforces it too)
+            offered = " or ".join(settings.fulfillment_types) or "neither"
+            return f"Not saved: this business does not offer {chosen_type}. Available: {offered}. Tell the customer, and only continue with an option that is available."
         async with AsyncSessionLocal() as session:
             try:
                 order = await orders_repo.update_order(
@@ -176,18 +196,26 @@ def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: 
                     fulfillment=fulfillment,
                     notes=notes,
                     source_channel=channel_type.value,
+                    currency_code=currency,
                 )
             except orders_repo.InvalidOrderItem as exc:
                 await session.rollback()
                 return f"Could not update the cart: {exc}"
             await session.commit()
-        return _format_order_summary(order)
+        return _format_order_summary(order, currency)
 
     async def confirm_order() -> str:
-        """Finalize the current cart as a placed order, once the customer has explicitly confirmed the items and fulfillment details are correct. Do not call this speculatively or before they've agreed. This requires their contact details already being captured via create_lead -- if it tells you something is missing, ask for that and call create_lead before trying again. You never collect or mention taking payment -- that is handled separately by the business after this."""
+        """Finalize the current cart, once the customer has explicitly confirmed the items and fulfillment details are correct. Do not call this speculatively or before they've agreed. It requires their contact details already captured via create_lead and a delivery/pickup choice already set via update_order -- if it tells you something is missing, get that first and try again. You never collect or mention taking payment -- that is handled separately by the business after this."""
         async with AsyncSessionLocal() as session:
             try:
-                order = await orders_repo.confirm_order(session, tenant_id, conversation_id)
+                order = await orders_repo.confirm_order(
+                    session,
+                    tenant_id,
+                    conversation_id,
+                    offered_fulfillment_types=settings.fulfillment_types,
+                    min_order_value=settings.min_order_value,
+                    human_confirmation=settings.human_confirmation,
+                )
             except orders_repo.NoCartToConfirm:
                 await session.rollback()
                 return "There's no cart to confirm yet -- add items with update_order first."
@@ -197,20 +225,37 @@ def build_tools(tenant_id: uuid.UUID, conversation_id: uuid.UUID, channel_type: 
                 return f"Can't confirm yet -- still need the customer's {missing}. Ask for it, call create_lead with it, then try confirm_order again."
             except orders_repo.MissingFulfillmentInfo:
                 await session.rollback()
-                return "Can't confirm yet -- ask whether they want delivery or pickup (and any other fulfillment detail like address/time), call update_order with that, then try confirm_order again."
+                offered = " or ".join(settings.fulfillment_types) or "neither"
+                return f"Can't confirm yet -- ask the customer how they want to receive it ({offered}) and any detail it needs (address for delivery, time for pickup), call update_order with that, then try confirm_order again."
+            except orders_repo.FulfillmentTypeNotOffered as exc:
+                await session.rollback()
+                offered = " or ".join(exc.offered) or "neither"
+                return f"Can't confirm -- this business does not offer {exc.chosen}. Available: {offered}. Tell the customer, and if there's an alternative, update_order with that fulfillment type."
+            except orders_repo.MissingFulfillmentDetail as exc:
+                await session.rollback()
+                return f"Can't confirm yet -- still need the {', '.join(exc.missing)} for this order. Ask the customer, call update_order with it, then try confirm_order again."
+            except orders_repo.BelowMinimumOrder as exc:
+                await session.rollback()
+                shortfall = format_money(exc.minimum - exc.total, currency)
+                return f"Can't confirm -- the minimum order is {format_money(exc.minimum, currency)} and this cart is {format_money(exc.total, currency)}. The customer needs to add {shortfall} more; tell them and offer to add items."
             await session.commit()
 
             tenant = await tenants_repo.get_tenant_by_id(session, tenant_id)
             if tenant is not None:
-                await notify_new_order(get_email_sender(), tenant, order)
+                await notify_new_order(get_email_sender(), tenant, order, settings)
 
-        return f"Order confirmed.\n\n{_format_order_summary(order)}"
+        if settings.human_confirmation:
+            return f"Order submitted for the business to confirm.\n\n{_format_order_summary(order, currency)}"
+        return f"Order confirmed.\n\n{_format_order_summary(order, currency)}"
 
+    available: dict[str, Callable[..., Awaitable[Any]]] = {
+        "search_documents": search_documents,
+        "search_catalog": search_catalog,
+        "browse_catalog": browse_catalog,
+        "create_lead": create_lead,
+        "update_order": update_order,
+        "confirm_order": confirm_order,
+    }
     return [
-        StructuredTool.from_function(coroutine=search_documents, name="search_documents"),
-        StructuredTool.from_function(coroutine=search_catalog, name="search_catalog"),
-        StructuredTool.from_function(coroutine=browse_catalog, name="browse_catalog"),
-        StructuredTool.from_function(coroutine=create_lead, name="create_lead"),
-        StructuredTool.from_function(coroutine=update_order, name="update_order"),
-        StructuredTool.from_function(coroutine=confirm_order, name="confirm_order"),
+        StructuredTool.from_function(coroutine=available[name], name=name) for name in enabled_tool_names(settings)
     ]

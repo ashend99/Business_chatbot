@@ -13,11 +13,13 @@ import asyncio
 import json
 import sys
 
+import httpx
 from openai import OpenAI
 
 from lib import (
     OPENAI_API_KEY,
     Scenario,
+    SettingsOverride,
     load_scenarios,
     new_external_user_id,
     new_run_id,
@@ -75,7 +77,7 @@ def _simulator_next(sim_messages: list[dict]) -> dict:
     return {"message": data.get("message", ""), "done": bool(data.get("done", False))}
 
 
-def run_scenario(scenario: Scenario) -> dict:
+def run_scenario(scenario: Scenario, local_now: str) -> dict:
     external_user_id = new_external_user_id(scenario.id)
     run_id = new_run_id()
     print(f"\n=== {scenario.id} ({external_user_id}) ===")
@@ -93,7 +95,17 @@ def run_scenario(scenario: Scenario) -> dict:
         transcript.append({"role": "customer", "text": customer_text})
         print(f"customer: {customer_text}")
 
-        bot_result = send_bot_message(scenario.channel, external_user_id, customer_text)
+        try:
+            bot_result = send_bot_message(scenario.channel, external_user_id, customer_text)
+        except httpx.HTTPStatusError as exc:
+            # e.g. 403 for a channel the tenant's admin hasn't enabled -- a
+            # legitimate outcome for a settings scenario, not a harness crash
+            detail = exc.response.text
+            transcript.append(
+                {"role": "assistant", "text": "", "http_status": exc.response.status_code, "http_detail": detail}
+            )
+            print(f"bot: [HTTP {exc.response.status_code}] {detail}")
+            break
         bot_reply = bot_result["reply"]
         conversation_id = bot_result["conversation_id"]
         transcript.append({"role": "assistant", "text": bot_reply, "actions": bot_result.get("actions", [])})
@@ -101,7 +113,8 @@ def run_scenario(scenario: Scenario) -> dict:
 
         if sim_turn["done"]:
             break
-        sim_messages.append({"role": "user", "content": bot_reply})
+        # an empty reply is the contract for "the bot stayed silent"
+        sim_messages.append({"role": "user", "content": bot_reply or "(no reply)"})
 
     return {
         "scenario_id": scenario.id,
@@ -110,13 +123,15 @@ def run_scenario(scenario: Scenario) -> dict:
         "conversation_id": conversation_id,
         "channel": scenario.channel,
         "success_criteria": scenario.success_criteria,
+        "settings_overrides": {"tenant": scenario.tenant_settings, "admin": scenario.admin_settings},
+        "run_context": {"business_local_now": local_now},
         "transcript": transcript,
     }
 
 
 async def _snapshot_db(conversation_id: str | None) -> dict:
     if conversation_id is None:
-        return {"leads": [], "orders": []}
+        return {"leads": [], "orders": [], "messages": {}}
 
     from sqlalchemy import select
 
@@ -131,7 +146,17 @@ async def _snapshot_db(conversation_id: str | None) -> dict:
         orders = (
             (await session.execute(select(Order).where(Order.conversation_id == conversation_id))).scalars().all()
         )
+        from sqlalchemy import func
+
+        from app.models.conversations import Message
+
+        counts = (
+            await session.execute(
+                select(Message.role, func.count()).where(Message.conversation_id == conversation_id).group_by(Message.role)
+            )
+        ).all()
         return {
+            "messages": {role.value: n for role, n in counts},
             "leads": [
                 {"id": str(l.id), "status": l.status.value, "fields": l.fields} for l in leads
             ],
@@ -141,6 +166,8 @@ async def _snapshot_db(conversation_id: str | None) -> dict:
                     "status": o.status.value,
                     "items": o.items,
                     "total": str(o.total),
+                    "currency_code": o.currency_code,
+                    "notes": o.notes,
                     "fulfillment": o.fulfillment,
                     "lead_id": str(o.lead_id) if o.lead_id else None,
                 }
@@ -163,7 +190,8 @@ async def _main() -> None:
             raise SystemExit(f"no scenario named {args.scenario!r}")
 
     for scenario in scenarios:
-        result = run_scenario(scenario)
+        with SettingsOverride(scenario) as overrides:
+            result = run_scenario(scenario, overrides.local_now())
         result["db_snapshot"] = await _snapshot_db(result["conversation_id"])
         path = result_path(scenario.id, result["run_id"])
         path.write_text(json.dumps(result, indent=2), encoding="utf-8")

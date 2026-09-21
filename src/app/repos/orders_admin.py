@@ -74,6 +74,8 @@ async def get_lead_fields(session: AsyncSession, tenant_id: uuid.UUID, lead_id: 
 
 _STAFF_ALLOWED_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
     OrderStatus.DRAFT: {OrderStatus.CANCELLED},
+    # human-confirmation mode: staff accept (-> PLACED) or reject (-> CANCELLED)
+    OrderStatus.PENDING_CONFIRMATION: {OrderStatus.PLACED, OrderStatus.CANCELLED},
     OrderStatus.PLACED: {OrderStatus.COMPLETED, OrderStatus.CANCELLED},
 }
 

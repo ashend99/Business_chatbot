@@ -29,17 +29,15 @@ from app.repos import conversations as conversations_repo
 from app.repos import tenants as tenants_repo
 from app.schemas.conversations import BotMessageAction, BotMessageResponse
 from app.services.bot_tools import build_tools
+from app.services.money import extract_amounts
+from app.services.prompt_builder import build_system_prompt
+from app.services.settings_resolver import EffectiveSettings, get_effective_settings
 from common import PROJECT_CONFIG
 
 logger = logging.getLogger(__name__)
 
 _agent_config = PROJECT_CONFIG.get("agent", {})
-MODEL_NAME = _agent_config.get("model", "gpt-4o-mini")
-SYSTEM_PROMPT_TEMPLATE = _agent_config.get("system_prompt", "You are a helpful assistant for {tenant_name}.")
-FALLBACK_REPLY = "Sorry, I'm having trouble responding right now -- please try again in a moment."
-
-# matches "$19.99", "$1,299", "$5" -- used by the pricing guardrail below
-_PRICE_PATTERN = re.compile(r"\$\s?\d+(?:,\d{3})*(?:\.\d{1,2})?")
+DEFAULT_FALLBACK_REPLY = _agent_config.get("prompt").get("default_fallback")
 
 # strips "[variant_id: <uuid>]" -- present in search_catalog/browse_catalog's
 # tool output so the agent can reference an item in update_order/create_lead,
@@ -50,10 +48,34 @@ _VARIANT_ID_SUFFIX_PATTERN = re.compile(r"\s*\[variant_id:[^\]]*\]")
 # the customer their order is confirmed/placed in prose without actually
 # having called confirm_order
 _ORDER_CONFIRMED_CLAIM_PATTERN = re.compile(
-    r"\border (?:is |has been )?(?:confirmed|placed)\b|\b(?:confirmed|placed) your order\b", re.IGNORECASE
+    # "your order is confirmed", "order has been placed", and also the version
+    # with words in between: "Your order for 2 Cold Espressos is confirmed"
+    r"\border\b[^.!?\n]{0,60}?\b(?:is|has been|was)\s+(?:now\s+)?(?:confirmed|placed)\b"
+    r"|\border (?:confirmed|placed)\b"
+    r"|\b(?:confirmed|placed) your order\b",
+    re.IGNORECASE,
 )
 
-_model = ChatOpenAI(model=MODEL_NAME, api_key=settings.openai_api_key)
+# A percentage discount/saving claim. No catalog item carries a discount, so
+# the only legitimate source is a knowledge-base document (e.g. a seasonal
+# promo) -- see _apply_discount_guardrail. Catches a tenant's custom
+# instructions talking the model into promising one.
+_DISCOUNT_CLAIM_PATTERN = re.compile(
+    r"\d{1,3}(?:\.\d+)?\s?%[^.!?\n]{0,40}?\b(?:discount|off|savings?|reduction)\b"
+    r"|\b(?:discount|off|save|savings?)\b[^.!?\n]{0,40}?\d{1,3}(?:\.\d+)?\s?%",
+    re.IGNORECASE,
+)
+_PERCENT_PATTERN = re.compile(r"\d{1,3}(?:\.\d+)?\s?%")
+
+# one ChatOpenAI per model name -- the model is an admin-set per-tenant
+# setting (TenantAdminSettings.llm_model), so it can differ between requests
+_models: dict[str, ChatOpenAI] = {}
+
+
+def _get_model(model_name: str) -> ChatOpenAI:
+    if model_name not in _models:
+        _models[model_name] = ChatOpenAI(model=model_name, api_key=settings.openai_api_key)
+    return _models[model_name]
 
 
 async def handle_message(
@@ -72,9 +94,20 @@ async def handle_message(
     # never replied, not that the user never spoke
     await session.commit()
 
-    tools = build_tools(tenant_id, conversation.id, channel_type)
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.format(tenant_name=tenant.name if tenant else "this business")
-    agent = create_react_agent(_model, tools, checkpointer=checkpointer, prompt=system_prompt)
+    effective = await get_effective_settings(tenant_id, session)
+    if not effective.bot_enabled:
+        # human takeover: the customer's message is stored above (so staff
+        # see it in Conversations) but the bot stays silent. An empty reply
+        # is the contract for "send nothing" to the channel adapter.
+        await conversations_repo.touch_conversation(session, conversation)
+        await session.commit()
+        return BotMessageResponse(reply="", conversation_id=conversation.id, actions=[])
+
+    tools = build_tools(tenant_id, conversation.id, channel_type, effective)
+    system_prompt = build_system_prompt(effective, tenant.name if tenant else "this business")
+    agent = create_react_agent(
+        _get_model(effective.llm_model), tools, checkpointer=checkpointer, prompt=system_prompt
+    )
 
     actions: list[BotMessageAction] = []
     try:
@@ -93,6 +126,9 @@ async def handle_message(
         # prices, cart total) computed server-side the same way
         # search_catalog's are -- combine whichever of the three ran this
         # turn so the guardrail below checks the reply against all of them.
+        # only outputs that actually state a price count: a "No matching
+        # products..." line adds nothing to verify and would just clutter the
+        # customer-facing fallback text
         trusted_outputs = [
             out
             for out in (
@@ -101,11 +137,12 @@ async def handle_message(
                 _last_tool_output(messages, "update_order"),
                 _last_tool_output(messages, "confirm_order"),
             )
-            if out is not None
+            if out is not None and extract_amounts(out, effective.currency_code)
         ]
         combined_trusted_output = "\n".join(trusted_outputs) if trusted_outputs else None
-        reply = _apply_pricing_guardrail(reply, combined_trusted_output)
-        reply = _apply_order_confirmation_guardrail(reply, messages)
+        reply = _apply_pricing_guardrail(reply, combined_trusted_output, effective)
+        reply = _apply_discount_guardrail(reply, messages)
+        reply = _apply_order_confirmation_guardrail(reply, messages, effective)
     except Exception:
         # a bot endpoint failing to generate should still reply with
         # *something* a channel adapter can forward, not a raw 500 -- but
@@ -114,7 +151,7 @@ async def handle_message(
         # below, or persisting the fallback message fails too
         logger.exception("agent run failed for conversation %s", conversation.id)
         await session.rollback()
-        reply = FALLBACK_REPLY
+        reply = effective.fallback_message or DEFAULT_FALLBACK_REPLY
 
     await conversations_repo.add_message(session, tenant_id, conversation.id, MessageRole.ASSISTANT, reply)
     await conversations_repo.touch_conversation(session, conversation)
@@ -167,18 +204,27 @@ def _extract_lead_actions(messages: list) -> list[BotMessageAction]:
     return actions
 
 
-def _apply_pricing_guardrail(reply: str, catalog_output: str | None) -> str:
+def _apply_pricing_guardrail(reply: str, catalog_output: str | None, settings: EffectiveSettings) -> str:
     """If the reply states a price that doesn't appear in this turn's
-    search_catalog output, the agent likely paraphrased/invented it --
-    discard the LLM's prose and fall back to the tool's own text instead."""
-    reply_prices = set(_PRICE_PATTERN.findall(reply))
+    trusted tool output, the agent likely paraphrased/invented it -- discard
+    the LLM's prose and fall back to the tool's own text instead. Amounts are
+    recognized in the tenant's currency and compared numerically.
+
+    Besides the tools' own figures, the tenant's minimum order value (it's in
+    the system prompt, so the agent legitimately quotes it) and the shortfall
+    of any trusted amount below it are also trusted."""
+    currency = settings.currency_code
+    reply_prices = extract_amounts(reply, currency)
     if not reply_prices:
         return reply
     if catalog_output is None:
         return reply  # no catalog lookup this turn, nothing to verify against
 
-    catalog_prices = set(_PRICE_PATTERN.findall(catalog_output))
-    if reply_prices <= catalog_prices:
+    trusted = extract_amounts(catalog_output, currency)
+    minimum = settings.min_order_value
+    if minimum:
+        trusted |= {minimum} | {minimum - amount for amount in trusted if amount < minimum}
+    if reply_prices <= trusted:
         return reply
     # the raw tool output is otherwise trustworthy, but it carries internal
     # [variant_id: ...] tags for the agent's own reference (see bot_tools.py)
@@ -187,18 +233,45 @@ def _apply_pricing_guardrail(reply: str, catalog_output: str | None) -> str:
     return f"Here's what I found:\n\n{customer_safe_output}"
 
 
-def _apply_order_confirmation_guardrail(reply: str, messages: list) -> str:
+def _apply_discount_guardrail(reply: str, messages: list) -> str:
+    """A reply promising a percentage discount is replaced unless that exact
+    percentage appears in a knowledge-base result this thread (a real,
+    published promo). Prices are fixed in the catalog, so an unsupported
+    "20% off" is invented -- typically the model obeying a tenant's custom
+    instructions over the pricing rules."""
+    if not _DISCOUNT_CLAIM_PATTERN.search(reply):
+        return reply
+    docs = (_last_tool_output(messages, "search_documents") or "").replace(" ", "")
+    percents = [p.replace(" ", "") for p in _PERCENT_PATTERN.findall(reply)]
+    if percents and all(p in docs for p in percents):
+        return reply
+    return (
+        "Our prices are as listed, and I can't offer or confirm discounts myself. "
+        "If you'd like, I can pass a discount request along to the business."
+    )
+
+
+def _apply_order_confirmation_guardrail(reply: str, messages: list, settings: EffectiveSettings) -> str:
     """If the reply tells the customer their order is confirmed/placed but
     confirm_order was never actually called (or was called and failed --
     e.g. an empty cart), the LLM said so without it being true. Placing an
     order is the one irreversible-feeling claim in this whole flow, so it
     gets the same treatment as the pricing guardrail: never trust the LLM's
-    own account of what happened, check the tool's actual result."""
+    own account of what happened, check the tool's actual result.
+
+    In human-confirmation mode a successful confirm_order only *submits* the
+    order for the business to confirm, so a reply claiming it is
+    confirmed/placed is never true and is replaced with the accurate
+    "submitted" message."""
     if not _ORDER_CONFIRMED_CLAIM_PATTERN.search(reply):
         return reply
 
     confirm_output = _last_tool_output(messages, "confirm_order")
-    if confirm_output is not None and confirm_output.startswith("Order confirmed."):
+
+    if settings.human_confirmation:
+        if confirm_output is not None and confirm_output.startswith("Order submitted"):
+            return "Your order has been submitted -- the business will confirm it shortly."
+    elif confirm_output is not None and confirm_output.startswith("Order confirmed."):
         return reply  # a real confirm_order call this thread actually succeeded
 
     update_output = _last_tool_output(messages, "update_order")

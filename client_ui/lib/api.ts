@@ -18,12 +18,27 @@ export class ApiError extends Error {
     readonly status: number,
     readonly detail: unknown,
   ) {
-    super(
-      typeof detail === "object" && detail !== null && "detail" in detail
-        ? String((detail as { detail: unknown }).detail)
-        : `Request failed with ${status}`,
-    );
+    super(ApiError.describe(status, detail));
     this.name = "ApiError";
+  }
+
+  /** FastAPI sends `detail` as a string, or (validation errors) a list of
+   * `{loc, msg}` objects -- flatten either into one readable message. */
+  static describe(status: number, detail: unknown): string {
+    if (typeof detail === "object" && detail !== null && "detail" in detail) {
+      const inner = (detail as { detail: unknown }).detail;
+      if (Array.isArray(inner)) {
+        return inner
+          .map((d) => {
+            const item = d as { loc?: unknown[]; msg?: string };
+            const field = item.loc?.slice(1).join(".");
+            return field ? `${field}: ${item.msg}` : (item.msg ?? "invalid value");
+          })
+          .join("; ");
+      }
+      return String(inner);
+    }
+    return `Request failed with ${status}`;
   }
 }
 

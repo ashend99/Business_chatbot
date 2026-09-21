@@ -109,7 +109,7 @@ export interface ConversationDetail {
 
 // ---- Orders ---------------------------------------------------------------
 
-export type OrderStatus = "draft" | "placed" | "completed" | "cancelled";
+export type OrderStatus = "draft" | "pending_confirmation" | "placed" | "completed" | "cancelled";
 
 export interface OrderItem {
   variant_id: string;
@@ -125,6 +125,7 @@ export interface OrderListItem {
   status: OrderStatus;
   items: OrderItem[];
   total: string;
+  currency_code: string | null;
   fulfillment: Record<string, string> | null;
   created_at: string;
 }
@@ -143,6 +144,7 @@ export interface OrderDetail {
   status: OrderStatus;
   items: OrderItem[];
   total: string;
+  currency_code: string | null;
   fulfillment: Record<string, string> | null;
   notes: string | null;
   source_channel: string | null;
@@ -288,4 +290,50 @@ export interface DocumentUpdate {
   draft_content?: string;
   active_from?: string | null;
   active_until?: string | null;
+}
+
+// ---- Settings ---------------------------------------------------------------
+
+export type BotTone = "formal" | "friendly" | "casual";
+export type NegotiationMode = "fixed" | "escalate";
+export type OrderConfirmationMode = "bot" | "human";
+
+/** Everything a tenant may edit. Admin-only values (currency, entitlements,
+ * channels, model, quotas) are never here -- see TenantCapabilities. */
+export interface TenantSettings {
+  timezone: string;
+  bot_name: string | null;
+  tone: BotTone;
+  language: string;
+  welcome_message: string | null;
+  fallback_message: string | null;
+  custom_instructions: string | null;
+  bot_enabled: boolean;
+  ordering_enabled: boolean;
+  catalog_enabled: boolean;
+  documents_enabled: boolean;
+  leads_enabled: boolean;
+  delivery_enabled: boolean;
+  pickup_enabled: boolean;
+  cash_on_delivery: boolean;
+  min_order_value: string | null;
+  negotiation_mode: NegotiationMode;
+  order_confirmation_mode: OrderConfirmationMode;
+  notify_emails: string[];
+  notify_new_lead: boolean;
+  notify_new_order: boolean;
+}
+
+/** Read-only, admin-set: what this tenant has been granted. */
+export interface TenantCapabilities {
+  currency_code: string;
+  ordering_allowed: boolean;
+  catalog_allowed: boolean;
+  documents_allowed: boolean;
+  leads_allowed: boolean;
+}
+
+export interface TenantSettingsResponse {
+  settings: TenantSettings;
+  capabilities: TenantCapabilities;
 }

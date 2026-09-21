@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+import { useCurrency } from "@/components/CurrencyProvider";
 import { OrderDetailPanel } from "@/components/orders/OrderDetailPanel";
 import { Topbar } from "@/components/Topbar";
 import { OrderStatusBadge } from "@/components/ui/Badge";
@@ -11,6 +12,7 @@ import type { OrderListItem } from "@/lib/types";
 const TABS: { key: string; label: string }[] = [
   { key: "", label: "All" },
   { key: "draft", label: "Draft" },
+  { key: "pending_confirmation", label: "Pending" },
   { key: "placed", label: "Placed" },
   { key: "completed", label: "Completed" },
   { key: "cancelled", label: "Cancelled" },
@@ -27,6 +29,7 @@ export function OrdersView({ orders, total }: { orders: OrderListItem[]; total: 
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const currency = useCurrency();
   const status = params.get("status") ?? "";
   const selectedId = params.get("order");
 
@@ -98,7 +101,7 @@ export function OrdersView({ orders, total }: { orders: OrderListItem[]; total: 
                       <td className="max-w-0 px-5 py-3 text-[13px] font-medium text-text-primary">
                         <span className="block truncate">{itemsSummary(order.items)}</span>
                       </td>
-                      <td className="px-5 py-3 text-[12.5px] text-text-secondary">{formatMoney(order.total)}</td>
+                      <td className="px-5 py-3 text-[12.5px] text-text-secondary">{formatMoney(order.total, order.currency_code ?? currency)}</td>
                       <td className="px-5 py-3">
                         <OrderStatusBadge status={order.status} />
                       </td>

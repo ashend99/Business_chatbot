@@ -22,6 +22,7 @@ class OrderRead(BaseModel):
     status: OrderStatus
     items: list[dict]
     total: Decimal
+    currency_code: str | None
     fulfillment: dict | None
     notes: str | None
     source_channel: str | None
@@ -36,6 +37,7 @@ class OrderListItem(BaseModel):
     status: OrderStatus
     items: list[dict]
     total: Decimal
+    currency_code: str | None
     fulfillment: dict | None
     created_at: datetime
 

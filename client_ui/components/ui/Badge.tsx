@@ -80,8 +80,9 @@ export function ConversationStatusBadge({ status }: { status: ConversationStatus
 
 const ORDER_STATUS: Record<OrderStatus, { label: string; tone: Tone }> = {
   draft: { label: "Draft", tone: "neutral" },
-  placed: { label: "Placed", tone: "warning" },
-  completed: { label: "Completed", tone: "positive" },
+  pending_confirmation: { label: "Pending", tone: "warning" },
+  placed: { label: "Placed", tone: "positive" },
+  completed: { label: "Completed", tone: "neutral" },
   cancelled: { label: "Cancelled", tone: "danger" },
 };
 

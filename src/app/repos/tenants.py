@@ -173,3 +173,19 @@ async def create_api_key(
     session.add(key)
     await session.flush()
     return key, raw_key
+
+
+async def list_api_keys(session: AsyncSession, tenant_id: uuid.UUID) -> list[TenantApiKeys]:
+    stmt = select(TenantApiKeys).where(TenantApiKeys.tenant_id == tenant_id).order_by(TenantApiKeys.created_at.desc())
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def revoke_api_key(session: AsyncSession, tenant_id: uuid.UUID, key_id: uuid.UUID) -> TenantApiKeys | None:
+    stmt = select(TenantApiKeys).where(TenantApiKeys.id == key_id, TenantApiKeys.tenant_id == tenant_id)
+    key = (await session.execute(stmt)).scalar_one_or_none()
+    if key is None:
+        return None
+    if key.revoked_at is None:
+        key.revoked_at = datetime.now(timezone.utc)
+        await session.flush()
+    return key
