@@ -29,6 +29,14 @@ Login: `demo` / `changeme123` (tenant `dulas_kitchen`, the one seeded dev
 tenant). A standalone `/widget-test` page (no dashboard login) exercises the
 bot directly like a real embedded chat widget would.
 
+**Admin UI** — `cd admin_ui && npm run dev`, served at `localhost:3001`. A
+separate Next.js app (not a route inside `client_ui`) for platform admins:
+tenant onboarding, admin settings (entitlements, channels, LLM model,
+quotas), `api_secret` key issuance. Login uses the env-configured
+`SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD`, not a tenant account. Calls the
+same backend's `/superadmin/*` API through its own `/api/*` proxy routes,
+same pattern as `client_ui`.
+
 **Eval harness** — `cd eval` (its scripts assume being run from that
 directory, or `python eval/conversation_agent.py` from the root works too
 since Python adds the script's own directory to `sys.path`). See

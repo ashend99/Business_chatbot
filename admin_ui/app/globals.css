@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+/*
+ * Dark mode is driven by an explicit `data-theme` attribute on <html>, set by
+ * the ThemeProvider (which resolves "system" to light/dark itself). This custom
+ * variant makes Tailwind's `dark:` utilities follow that attribute instead of
+ * the `prefers-color-scheme` media query.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ---- Accent palettes -------------------------------------------------------
+ * Each tenant picks one accent. `--accent` is the base (≈ Tailwind 600),
+ * `--accent-strong` a darker shade (≈ 700) used for text on tinted surfaces.
+ * The tinted "soft" tokens are derived from these per theme, below.
+ */
+:root,
+[data-accent="indigo"] { --accent: #4f46e5; --accent-strong: #4338ca; }
+[data-accent="teal"]   { --accent: #0d9488; --accent-strong: #0f766e; }
+[data-accent="rose"]   { --accent: #e11d48; --accent-strong: #be123c; }
+[data-accent="amber"]  { --accent: #d97706; --accent-strong: #b45309; }
+[data-accent="violet"] { --accent: #7c3aed; --accent-strong: #6d28d9; }
+
+/* ---- Light theme (default) ---------------------------------------------- */
+:root {
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-alt: #f2f2f4;
+  --border: #e9e9ec;
+  --border-subtle: #eeeef0;
+  --text-primary: #1c1c1f;
+  --text-secondary: #6b6b73;
+  --text-muted: #8a8a90;
+
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, white);
+  --accent-soft-fg: var(--accent-strong);
+
+  --positive: #16a34a;
+  --negative: #dc2626;
+}
+
+/* ---- Dark theme ------------------------------------------------------------ */
+[data-theme="dark"] {
+  --bg: #17181b;
+  --surface: #1f2023;
+  --surface-alt: #26272b;
+  --border: #2c2d31;
+  --border-subtle: #26272b;
+  --text-primary: #ececed;
+  --text-secondary: #a3a3aa;
+  --text-muted: #75757c;
+
+  --accent-soft: color-mix(in oklab, var(--accent) 24%, #1f2023);
+  --accent-soft-fg: color-mix(in oklab, var(--accent) 45%, white);
+
+  --positive: #4ade80;
+  --negative: #f87171;
+}
+
+/* ---- Expose the tokens as Tailwind utilities ---------------------------- */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-soft-fg: var(--accent-soft-fg);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html { height: 100%; }
+
+body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* No flash of default-blue links before a component styles them. */
+a { color: inherit; text-decoration: none; }
