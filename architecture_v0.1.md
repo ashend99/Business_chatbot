@@ -105,7 +105,11 @@ assembled from, so prompt and toolset can't disagree; see §5). The full set:
 - **`create_lead`** — write-only upsert-by-conversation (`status=interested`
   as soon as intent shows, `status=new` once contact details are
   collected — calling it more than once per conversation is expected, not a
-  bug). Race-safe against LangGraph running multiple tool calls from one
+  bug). Status is enforced in `repos/leads.py` (`resolve_bot_status`), not
+  left to the LLM: `new` is only granted once every tenant-required
+  `LeadFieldDef` is filled (else it stays `interested` and the tool result
+  says what's missing); the bot only moves a lead forward, and never touches
+  a lead staff set to `contacted`/`converted`/`lost`. Race-safe against LangGraph running multiple tool calls from one
   turn concurrently via a Postgres advisory lock keyed on `conversation_id`.
 - **`update_order`** — sets the customer's current cart. Full-replace
   semantics (the agent sends the whole cart each call, not incremental

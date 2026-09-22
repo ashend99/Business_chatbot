@@ -8,6 +8,7 @@ imports) must never reach into that module.
 """
 
 import uuid
+from typing import NamedTuple
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.leads import Lead, LeadFieldDef, LeadStatus
 from app.models.orders import Order
 from app.repos.tenant_scope import tenant_scope
+
+# Statuses staff set from the dashboard. Once a lead is in one of these the
+# bot must never move it -- otherwise a customer who keeps chatting after
+# being contacted would silently reset the lead back to NEW/INTERESTED.
+_STAFF_OWNED_STATUSES = frozenset({LeadStatus.CONTACTED, LeadStatus.CONVERTED, LeadStatus.LOST})
+
+
+class LeadUpsertResult(NamedTuple):
+    lead: Lead
+    # True only for the specific transition into status=NEW, so the caller
+    # can send the new-lead notification exactly once
+    became_new: bool
+    # Labels of required fields still missing when the bot asked for NEW; if
+    # non-empty the lead was kept at INTERESTED instead (or, for a lead
+    # that's already NEW, left as it was) and the agent should be told what
+    # to collect
+    missing_required: list[str]
+
+
+def resolve_bot_status(existing: LeadStatus | None, requested: LeadStatus, missing_required: list[str]) -> LeadStatus:
+    """The status a lead ends up with when the bot asks for `requested`."""
+    if existing is not None and existing in _STAFF_OWNED_STATUSES:
+        return existing  # staff own it now: hands off
+    if existing == LeadStatus.NEW:
+        return LeadStatus.NEW  # the bot never downgrades NEW back to INTERESTED
+    # a fresh lead or an INTERESTED one: NEW only with the required details
+    if requested == LeadStatus.NEW and missing_required:
+        return LeadStatus.INTERESTED
+    return requested
 
 
 async def create_or_update_lead_from_bot(
@@ -26,16 +56,21 @@ async def create_or_update_lead_from_bot(
     status: LeadStatus,
     fields: dict,
     source_channel: str | None = None,
-) -> tuple[Lead, bool]:
+) -> LeadUpsertResult:
     """Upsert by (tenant_id, conversation_id): one conversation produces at
     most one lead row, refined over multiple turns (e.g. INTERESTED as
     soon as intent is clear, then updated to NEW once contact details come
     in) rather than a new duplicate row per tool call.
 
-    Returns (lead, became_new) -- became_new is True only for the specific
-    transition into status=NEW (a fresh insert as NEW, or an update from a
-    different status to NEW), so the caller can decide whether to send a
-    new-lead notification exactly once, not on every subsequent call.
+    Status is enforced here, not left to the agent:
+    - the bot only ever moves a lead forward (INTERESTED -> NEW), never back;
+    - a lead staff have moved to CONTACTED/CONVERTED/LOST keeps its status
+      (new field values are still merged in);
+    - NEW requires every field the tenant marked required (LeadFieldDef) to
+      be filled, counting values already on the lead -- otherwise the lead
+      stays INTERESTED and `missing_required` says what's missing.
+
+    See LeadUpsertResult for what's returned.
     """
     existing: Lead | None = None
     if conversation_id is not None:
@@ -54,23 +89,31 @@ async def create_or_update_lead_from_bot(
         stmt = select(Lead).where(tenant_scope(Lead.tenant_id, tenant_id), Lead.conversation_id == conversation_id)
         existing = (await session.execute(stmt)).scalar_one_or_none()
 
+    # what the lead's fields will be after this call -- NEW is judged on this
+    merged_fields = {**(existing.fields if existing is not None else {}), **fields}
+    missing_required: list[str] = []
+    if status == LeadStatus.NEW:
+        missing_required = await _missing_required_labels(session, tenant_id, merged_fields)
+
+    new_status = resolve_bot_status(existing.status if existing is not None else None, status, missing_required)
+
     if existing is None:
         lead = Lead(
             tenant_id=tenant_id,
             conversation_id=conversation_id,
             matched_variant_id=matched_variant_id,
-            status=status,
+            status=new_status,
             fields=fields,
             source_channel=source_channel,
         )
         session.add(lead)
         await session.flush()
-        became_new = status == LeadStatus.NEW
+        became_new = new_status == LeadStatus.NEW
     else:
         lead = existing
-        became_new = status == LeadStatus.NEW and existing.status != LeadStatus.NEW
-        lead.status = status
-        lead.fields = {**lead.fields, **fields}
+        became_new = new_status == LeadStatus.NEW and existing.status != LeadStatus.NEW
+        lead.status = new_status
+        lead.fields = merged_fields
         if matched_variant_id is not None:
             lead.matched_variant_id = matched_variant_id
         if source_channel is not None:
@@ -96,7 +139,19 @@ async def create_or_update_lead_from_bot(
             order.lead_id = lead.id
         await session.flush()
 
-    return lead, became_new
+    return LeadUpsertResult(lead, became_new, missing_required)
+
+
+async def _missing_required_labels(session: AsyncSession, tenant_id: uuid.UUID, lead_fields: dict) -> list[str]:
+    """Labels of this tenant's required LeadFieldDefs that have no value in
+    `lead_fields`."""
+    stmt = (
+        select(LeadFieldDef.field_key, LeadFieldDef.label)
+        .where(tenant_scope(LeadFieldDef.tenant_id, tenant_id), LeadFieldDef.required.is_(True))
+        .order_by(LeadFieldDef.sort_order)
+    )
+    required = (await session.execute(stmt)).all()
+    return [label for field_key, label in required if not lead_fields.get(field_key)]
 
 
 async def get_missing_required_fields(
@@ -110,19 +165,10 @@ async def get_missing_required_fields(
     "phone" -- whatever a tenant has actually marked required is what's
     enforced, so this generalizes across each tenant's own configured
     fields rather than assuming every business wants the same two."""
-    stmt = (
-        select(LeadFieldDef.field_key, LeadFieldDef.label)
-        .where(tenant_scope(LeadFieldDef.tenant_id, tenant_id), LeadFieldDef.required.is_(True))
-        .order_by(LeadFieldDef.sort_order)
-    )
-    required = (await session.execute(stmt)).all()
-    if not required:
-        return []
-
     lead_fields: dict = {}
     if lead_id is not None:
         lead = await session.get(Lead, lead_id)
         if lead is not None:
             lead_fields = lead.fields or {}
 
-    return [label for field_key, label in required if not lead_fields.get(field_key)]
+    return await _missing_required_labels(session, tenant_id, lead_fields)

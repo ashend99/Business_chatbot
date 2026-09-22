@@ -75,7 +75,10 @@ export function ChatWidget() {
   }
 
   return (
-    <div className="flex h-[560px] flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-lg">
+    // The widget is always light (hard-coded white surfaces), so it sets its own
+    // text color -- otherwise it inherits the dashboard's light-on-dark text
+    // color when the dark theme is active, giving white text on white.
+    <div className="flex h-[560px] flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white text-neutral-900 shadow-lg">
       <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3">
         <div>
           <p className="text-[13px] font-semibold text-neutral-800">Dula&apos;s Kitchen</p>
@@ -102,7 +105,7 @@ export function ChatWidget() {
             className={`max-w-[80%] whitespace-pre-wrap rounded-xl px-3 py-2 text-[13px] ${
               m.role === "user"
                 ? "self-end rounded-br-sm bg-neutral-800 text-white"
-                : "self-start rounded-bl-sm bg-neutral-100 text-neutral-800"
+                : "self-start rounded-bl-sm bg-neutral-100 text-neutral-900"
             }`}
           >
             {m.content}
@@ -132,7 +135,7 @@ export function ChatWidget() {
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type a message…"
           disabled={!userId || sending}
-          className="flex-1 rounded-lg border border-neutral-200 px-3 py-2 text-[13px] outline-none focus:border-neutral-400"
+          className="flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-[13px] text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-400"
         />
         <button
           type="submit"

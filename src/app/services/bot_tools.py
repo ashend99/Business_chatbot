@@ -156,7 +156,7 @@ def build_tools(
         lead_status = LeadStatus.NEW if status == "new" else LeadStatus.INTERESTED
 
         async with AsyncSessionLocal() as session:
-            lead, became_new = await leads_repo.create_or_update_lead_from_bot(
+            result = await leads_repo.create_or_update_lead_from_bot(
                 session,
                 tenant_id,
                 conversation_id=conversation_id,
@@ -165,16 +165,27 @@ def build_tools(
                 fields=fields,
                 source_channel=channel_type.value,
             )
+            lead = result.lead
             await session.commit()
 
             # only ever fires once per lead -- became_new is only True on
             # the specific transition into NEW, not on every call
-            if became_new:
+            if result.became_new:
                 tenant = await tenants_repo.get_tenant_by_id(session, tenant_id)
                 if tenant is not None:
                     await notify_new_lead(get_email_sender(), tenant, lead, settings)
 
-        return json.dumps({"lead_id": str(lead.id), "status": lead.status.value})
+        response: dict = {"lead_id": str(lead.id), "status": lead.status.value}
+        if result.missing_required:
+            # the lead was NOT marked "new" -- tell the agent what to ask for
+            # so it collects it instead of assuming the lead is complete
+            response["missing_fields"] = result.missing_required
+            response["note"] = (
+                "Lead kept as 'interested': still need "
+                + ", ".join(result.missing_required)
+                + ". Ask the customer for it, then call create_lead again with status='new'."
+            )
+        return json.dumps(response)
 
     async def update_order(
         items: list[OrderItemInput], fulfillment: dict | None = None, notes: str | None = None
