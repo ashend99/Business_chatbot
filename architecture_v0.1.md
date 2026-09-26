@@ -195,7 +195,7 @@ layer nobody sets per tenant:
 | Layer | Who writes | Examples |
 |---|---|---|
 | **Platform constants** (`project_config.yaml`) | nobody per tenant | guardrails, RAG threshold, the payment-boundary rule, default model |
-| **Admin settings** (`tenant_admin_settings`) | superadmin only, at onboarding (`/superadmin/tenants/{id}/settings`) | `currency_code`, entitlements (`ordering/catalog/documents/leads_allowed`), `allowed_channels`, `llm_model`, quotas (`monthly_message_limit`, `max_documents` — stored, **not enforced**), `api_secret` key issuance |
+| **Admin settings** (`tenant_admin_settings`) | superadmin only, at onboarding (`/superadmin/tenants/{id}/settings`) | `currency_code`, entitlements (`ordering/catalog/documents/leads_allowed`), `allowed_channels`, `llm_model`, quotas (`monthly_message_limit` — enforced, see §12; `max_documents` — stored, **not enforced**), `api_secret` key issuance |
 | **Tenant settings** (`tenant_settings`) | the tenant, from the dashboard (`/tenant/settings`) | `timezone`; persona (`bot_name`, `tone`, `language`, welcome/fallback messages, `custom_instructions`); `bot_enabled` + feature toggles; ordering rules (`delivery_enabled`, `pickup_enabled`, `cash_on_delivery`, `min_order_value`, `negotiation_mode`, `order_confirmation_mode`); notifications (`notify_emails`, `notify_new_lead/order`) |
 
 Why currency is admin-only: orders store bare numbers with no currency, so a
@@ -346,13 +346,12 @@ transcript yourself — not as an authoritative result.
 
 - **No superadmin UI** — admin settings and `api_secret` keys are managed
   via the `/superadmin` API only.
-- **Quotas not enforced** — `monthly_message_limit`/`max_documents` are
-  stored but nothing counts against them yet.
+- **`max_documents` not enforced** — stored only. (`monthly_message_limit`
+  *is* enforced, see §12.)
 - **No live human handoff** — negotiation `escalate` only records the request;
   `bot_enabled=false` is the only takeover switch.
-- **`tzdata`** is present transitively but not declared in `pyproject.toml`;
-  Windows needs it for `zoneinfo` (timezones). Declare it if `uv sync` ever
-  drops it.
+- **Rate limits are per process** — exact with one backend instance; move them
+  to Redis/Postgres before running several.
 - **Real channel wiring** — `ConversationChannel` models
   `website_widget`/`facebook`/`instagram`/`whatsapp`, and everything is
   channel-agnostic by design (the bot just receives
@@ -370,3 +369,30 @@ transcript yourself — not as an authoritative result.
 
 See [AGENTS.md](AGENTS.md)'s "Environment gotchas" section — kept there
 since it's about *how to run things*, not *what the system is*.
+
+## 12. Production: tests, CI, deployment, operations
+
+- **Tests** (`tests/`, see `tests/README.md`): unit tests need nothing; DB/API/
+  agent tests run against a separate Postgres+pgvector database
+  (`TEST_DATABASE_URL`, name must contain "test") with embeddings, the chat
+  model and email faked — nothing leaves the machine. Agent tests drive the
+  real LangGraph agent with a scripted model and assert on DB rows.
+- **CI** (`.github/workflows/ci.yml`): backend lint (full rules on `tests/`,
+  real-error rules on `src/`), mypy, the full suite against a throwaway
+  pgvector service; the Docker image is built, migrated and health-checked;
+  both frontends lint, type-check and build.
+- **Deployment** ([docs/deployment.md](docs/deployment.md)): backend image on
+  Railway (`railway.json`: migrations as a pre-deploy step, never on
+  startup), frontends on Vercel, Supabase Postgres. Browsers never call the
+  backend directly, so it has no CORS. `ENVIRONMENT=production` refuses to
+  start with dev placeholders (`core/config.py`). Health: `/health`
+  (liveness, no DB) and `/health/ready` (DB check).
+- **Abuse/cost limits**: `POST /bot/message` has per-customer and per-tenant
+  burst limits (`services/rate_limit.py`, `bot.rate_limit` in
+  `project_config.yaml`, 429 before anything is stored), and the admin-set
+  `monthly_message_limit`: past it the bot goes silent like
+  `bot_enabled=false` (message stored, no LLM call) with a
+  `message_limit_reached` action.
+- **Operations** ([docs/operations.md](docs/operations.md)): Sentry (backend,
+  only with `SENTRY_DSN`, configured to send no request bodies or personal
+  data), uptime monitoring on `/health/ready`, backups and a restore drill.

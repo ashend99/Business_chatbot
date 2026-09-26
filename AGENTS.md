@@ -43,7 +43,19 @@ since Python adds the script's own directory to `sys.path`). See
 `eval/CLAUDE.md` for details.
 
 **Migrations** — `alembic upgrade head` from the repo root (`alembic.ini`
-points `script_location` at `database/alembic`).
+points `script_location` at `database/alembic`). `MIGRATION_DATABASE_URL`, if
+set, overrides `DATABASE_URL` for migrations only.
+
+**Tests** — `pytest` from the repo root. DB-backed tests need
+`TEST_DATABASE_URL` in `.env.test` (copy `.env.test.example`; a separate
+local database whose name contains "test" — never the Supabase dev DB);
+without it they skip and `pytest -m "not db"` runs the offline unit tests.
+See `tests/README.md`. CI (`.github/workflows/ci.yml`) runs the same suite on
+every push, plus the Docker image and both frontend builds — keep it green.
+
+**Docker** — `docker compose up --build` runs Postgres+pgvector, migrations
+and the backend (host port 5433 for the db, 8000 for the API). Deployment
+and operations: `docs/deployment.md`, `docs/operations.md`.
 
 ## Environment gotchas worth knowing before you hit them
 

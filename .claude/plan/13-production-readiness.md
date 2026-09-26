@@ -8,6 +8,17 @@ and a staging/production deployment. Supersedes the ordering (not the
 content) of [11-security-hardening.md](11-security-hardening.md) and
 [12-deployment.md](12-deployment.md).
 
+## Status
+
+Implemented in the repo (2026-09-26): all five phases. What remains is the
+account-side work only -- creating the Supabase/Railway/Vercel/Sentry
+projects and setting their variables, following
+[docs/deployment.md](../../docs/deployment.md) and
+[docs/operations.md](../../docs/operations.md). Deviations from the plan
+below: branch flow is `main` only for now (no `develop`/staging yet);
+Sentry is backend-only (frontend errors via Vercel logs until the Sentry
+wizard is run per app).
+
 ## Target topology
 
 | Part | Where |
