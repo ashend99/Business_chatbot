@@ -1,4 +1,5 @@
 import contextlib
+import math
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -7,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.deps import get_current_service_tenant
 from app.db.session import get_db_session
 from app.schemas.conversations import BotMessageRequest, BotMessageResponse
-from app.services import bot_engine
+from app.services import bot_engine, rate_limit
 from app.services.settings_resolver import get_effective_settings
 
 router = APIRouter(prefix="/bot", tags=["bot"])
@@ -32,6 +33,17 @@ async def send_message(
     effective = await get_effective_settings(tenant_id, session)
     if payload.channel_type.value not in effective.allowed_channels:
         raise HTTPException(status.HTTP_403_FORBIDDEN, f"channel {payload.channel_type.value!r} is not enabled for this tenant")
+
+    # burst limits, checked before anything is stored or any LLM call is made
+    user_key = (tenant_id, payload.channel_type.value, payload.external_user_id)
+    for limiter, key, scope in ((rate_limit.per_user, user_key, "customer"), (rate_limit.per_tenant, tenant_id, "tenant")):
+        retry_after = limiter.hit(key)
+        if retry_after is not None:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                f"too many messages for this {scope}, slow down",
+                headers={"Retry-After": str(max(1, math.ceil(retry_after)))},
+            )
 
     tracing: contextlib.AbstractContextManager[object] = contextlib.nullcontext()
     if _TRACE_HEADER in request.headers:

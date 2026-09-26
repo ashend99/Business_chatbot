@@ -36,6 +36,11 @@ dependencies = [
     # since api/bot/router.py now imports it directly for eval distributed
     # tracing (see eval/LANGSMITH_PLAN.md)
     "langsmith>=0.12.1",
+    # error reporting, active only when SENTRY_DSN is set (see app/main.py)
+    "sentry-sdk[fastapi]>=2.0",
+    # IANA timezone data for zoneinfo -- Windows and slim Linux images don't
+    # ship it, and every bot turn renders the tenant's local time
+    "tzdata>=2026.3",
 ]
 
 [dependency-groups]

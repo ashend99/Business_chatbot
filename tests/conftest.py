@@ -117,6 +117,15 @@ def outbox(monkeypatch) -> list:
     return sender.outbox
 
 
+@pytest.fixture(autouse=True)
+def _fresh_rate_limits():
+    """The bot's burst limiters are process-wide; start every test empty."""
+    from app.services import rate_limit
+
+    rate_limit.per_user.reset()
+    rate_limit.per_tenant.reset()
+
+
 # ---- database ---------------------------------------------------------------
 
 

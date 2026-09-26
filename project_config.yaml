@@ -112,6 +112,16 @@ documents:
   url_import:
     timeout_seconds: 15
 
+bot:
+  # POST /bot/message burst limits (services/rate_limit.py) -- every message
+  # can cost an LLM call, and a website widget is reachable by anyone
+  rate_limit:
+    # one customer (tenant + channel + external user id); a person typing
+    # never gets near this
+    per_user_per_minute: 20
+    # all of one tenant's customers together
+    per_tenant_per_minute: 300
+
 agent:
   model: "gpt-4o-mini"
   # The system prompt is assembled per request by services/prompt_builder.py

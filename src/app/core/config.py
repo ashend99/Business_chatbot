@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     # matching migration would break embedding inserts
     embedding_dimensions: int = 1536
 
+    # error reporting -- unset (the default) disables Sentry entirely
+    sentry_dsn: str | None = None
+    # fraction of requests traced for performance; errors are always sent
+    sentry_traces_sample_rate: float = 0.05
+
     @model_validator(mode="after")
     def _check_production(self) -> "Settings":
         """Fail fast at startup instead of running production with a

@@ -30,7 +30,7 @@ from app.repos import tenants as tenants_repo
 from app.schemas.conversations import BotMessageAction, BotMessageResponse
 from app.services.bot_tools import build_tools
 from app.services.money import extract_amounts
-from app.services.prompt_builder import build_system_prompt
+from app.services.prompt_builder import build_system_prompt, local_now
 from app.services.settings_resolver import EffectiveSettings, get_effective_settings
 from common import PROJECT_CONFIG
 
@@ -103,6 +103,16 @@ async def handle_message(
         await session.commit()
         return BotMessageResponse(reply="", conversation_id=conversation.id, actions=[])
 
+    if await _over_monthly_limit(session, effective):
+        # admin-set quota spent: same silent contract as bot_enabled=false
+        # (message kept for staff, no LLM call), plus an action so the
+        # channel adapter can tell why the bot didn't answer
+        await conversations_repo.touch_conversation(session, conversation)
+        await session.commit()
+        return BotMessageResponse(
+            reply="", conversation_id=conversation.id, actions=[BotMessageAction(type="message_limit_reached")]
+        )
+
     tools = build_tools(tenant_id, conversation.id, channel_type, effective)
     system_prompt = build_system_prompt(effective, tenant.name if tenant else "this business")
     agent = create_react_agent(
@@ -158,6 +168,18 @@ async def handle_message(
     await session.commit()
 
     return BotMessageResponse(reply=reply, conversation_id=conversation.id, actions=actions)
+
+
+async def _over_monthly_limit(session: AsyncSession, settings: EffectiveSettings) -> bool:
+    """True once this tenant's customer messages this calendar month (in the
+    tenant's timezone, counting the one just stored) exceed the admin-set
+    monthly_message_limit. No limit set = unlimited."""
+    limit = settings.monthly_message_limit
+    if limit is None:
+        return False
+    month_start = local_now(settings).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    used = await conversations_repo.count_user_messages_since(session, settings.tenant_id, month_start)
+    return used > limit
 
 
 def _last_ai_text(messages: list) -> str:

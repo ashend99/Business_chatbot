@@ -67,6 +67,17 @@ async def add_message(
     return message
 
 
+async def count_user_messages_since(session: AsyncSession, tenant_id: uuid.UUID, since: datetime) -> int:
+    """Customer (role=user) messages this tenant received since `since` --
+    what monthly_message_limit counts against."""
+    stmt = (
+        select(func.count())
+        .select_from(Message)
+        .where(tenant_scope(Message.tenant_id, tenant_id), Message.role == MessageRole.USER, Message.created_at >= since)
+    )
+    return (await session.execute(stmt)).scalar_one()
+
+
 async def list_conversations(
     session: AsyncSession,
     tenant_id: uuid.UUID,

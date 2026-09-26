@@ -22,12 +22,15 @@ from app.api.tenant.orders import router as tenant_orders_router
 from app.api.tenant.settings import router as tenant_settings_router
 from app.components.rag import get_rag
 from app.core.config import settings
+from app.core.observability import init_sentry
 from common import configure_logging
 
 # must run before uvicorn starts serving requests -- see
 # common/logging_setup.py for why this is needed at all: without it,
 # `logger.info(...)` records are silently dropped below WARNING everywhere.
 configure_logging()
+# before the app is built, so its FastAPI integration hooks every request
+init_sentry(settings)
 
 # psycopg's async mode can't use Windows' default ProactorEventLoop -- only
 # effective if set before uvicorn creates its event loop, i.e. before
