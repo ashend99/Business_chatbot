@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Field, Input, PasswordInput } from "@/components/ui/Field";
+
+// the query string never changes while this page is mounted
+const noSubscribe = () => () => {};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,13 +16,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [resetDone, setResetDone] = useState(false);
-
-  // Set by /reset-password after a successful reset. Read in an effect (not
-  // useSearchParams) to avoid needing a Suspense boundary around the form.
-  useEffect(() => {
-    setResetDone(new URLSearchParams(window.location.search).get("reset") === "1");
-  }, []);
+  // Set by /reset-password after a successful reset. Read via
+  // useSyncExternalStore (not useSearchParams) to avoid needing a Suspense
+  // boundary around the form; the server snapshot is `false`, so hydration
+  // matches and the banner appears on the client.
+  const resetDone = useSyncExternalStore(
+    noSubscribe,
+    () => new URLSearchParams(window.location.search).get("reset") === "1",
+    () => false,
+  );
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

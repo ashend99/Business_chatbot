@@ -33,7 +33,7 @@ async def send_message(
     if payload.channel_type.value not in effective.allowed_channels:
         raise HTTPException(status.HTTP_403_FORBIDDEN, f"channel {payload.channel_type.value!r} is not enabled for this tenant")
 
-    tracing = contextlib.nullcontext()
+    tracing: contextlib.AbstractContextManager[object] = contextlib.nullcontext()
     if _TRACE_HEADER in request.headers:
         from langsmith.run_helpers import tracing_context
 
