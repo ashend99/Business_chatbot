@@ -62,8 +62,16 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "tests"]
 asyncio_mode = "auto"
+# one event loop for the whole run: the app's SQLAlchemy engine is a
+# module-level singleton, and its pooled connections are bound to the loop
+# that opened them -- a fresh loop per test would strand them
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = [
+    "db: needs the Postgres test database (TEST_DATABASE_URL) -- skipped when it isn't configured",
+]
 
 [build-system]
 requires = ["hatchling"]
