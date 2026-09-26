@@ -41,6 +41,7 @@ SUPERADMIN_PASSWORD = os.environ.get("SUPERADMIN_PASSWORD")
 class Scenario:
     def __init__(self, data: dict):
         self.id: str = data["id"]
+        self.category: str | None = data.get("category")
         self.channel: str = data.get("channel", "website_widget")
         self.persona: str = data["persona"]
         self.success_criteria: str = data["success_criteria"]
@@ -51,6 +52,11 @@ class Scenario:
         settings: dict = data.get("settings") or {}
         self.tenant_settings: dict = settings.get("tenant") or {}
         self.admin_settings: dict = settings.get("admin") or {}
+        # Optional deterministic checks consumed by eval/langsmith_eval's
+        # evaluators (see LANGSMITH_PLAN.md section 5) -- entirely additive,
+        # a scenario with no `checks:` block is graded by the LLM judge only,
+        # same as today.
+        self.checks: dict = data.get("checks") or {}
 
 
 def load_scenarios() -> list[Scenario]:

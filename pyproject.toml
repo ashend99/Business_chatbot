@@ -32,6 +32,10 @@ dependencies = [
     "langchain-text-splitters>=1.1.2",
     "langgraph-checkpoint-postgres>=3.1.2",
     "rank-bm25>=0.2.2",
+    # already pulled in transitively by langchain-core; declared explicitly
+    # since api/bot/router.py now imports it directly for eval distributed
+    # tracing (see eval/LANGSMITH_PLAN.md)
+    "langsmith>=0.12.1",
 ]
 
 [dependency-groups]
