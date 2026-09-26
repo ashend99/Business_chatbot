@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -14,10 +15,14 @@ from app.db.base import Base
 config = context.config
 
 # use the app's real DB connection instead of the alembic.ini placeholder.
+# MIGRATION_DATABASE_URL, when set, wins: in production the app talks to a
+# transaction-mode pooler (Supabase :6543), but schema changes belong on a
+# direct/session connection (:5432) -- see docs/deployment.md.
 # "%" must be escaped as "%%" -- set_main_option stores it through
 # configparser, which treats a bare "%" as interpolation syntax (relevant
 # for a URL-encoded password, e.g. "%40" for a literal "@")
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+migration_url = os.environ.get("MIGRATION_DATABASE_URL") or settings.database_url
+config.set_main_option("sqlalchemy.url", migration_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

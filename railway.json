@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile",
+    "watchPatterns": ["src/**", "database/**", "Dockerfile", "pyproject.toml", "uv.lock", "alembic.ini", "project_config.yaml"]
+  },
+  "deploy": {
+    "preDeployCommand": ["alembic upgrade head"],
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 5
+  }
+}
