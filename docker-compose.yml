@@ -1,0 +1,52 @@
+# Local stack: Postgres+pgvector, migrations, backend.
+#
+#   docker compose up --build
+#
+# The backend reads the rest of its config (OPENAI_API_KEY, JWT_SECRET, ...)
+# from .env, but DATABASE_URL is overridden to point at the db container
+# below -- never at the Supabase database from .env. Frontends keep running
+# with `npm run dev` against http://localhost:8000.
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: business_chatbot
+    # 5433 on the host: a native Postgres install often already owns 5432
+    ports: ["5433:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/business_chatbot
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/business_chatbot
+    ports: ["8000:8000"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

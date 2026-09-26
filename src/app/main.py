@@ -10,6 +10,7 @@ from psycopg.rows import dict_row
 
 from app.api.auth.router import router as auth_router
 from app.api.bot.router import router as bot_router
+from app.api.health.router import router as health_router
 from app.api.superadmin.auth import router as superadmin_auth_router
 from app.api.superadmin.settings import router as superadmin_settings_router
 from app.api.superadmin.tenants import router as superadmin_tenants_router
@@ -91,6 +92,7 @@ app.include_router(tenant_orders_router)
 app.include_router(tenant_settings_router)
 app.include_router(tenant_conversations_router)
 app.include_router(bot_router)
+app.include_router(health_router)
 
 if __name__ == "__main__":
     import uvicorn

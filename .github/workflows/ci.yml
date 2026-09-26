@@ -57,6 +57,45 @@ jobs:
       - name: Tests
         run: uv run pytest
 
+  docker:
+    name: Backend image (build + smoke test)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: ci-throwaway
+          POSTGRES_DB: business_chatbot
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # --network host below, so the container reaches the service on localhost
+      DATABASE_URL: postgresql+psycopg://postgres:ci-throwaway@localhost:5432/business_chatbot
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: docker build -t backend:ci .
+
+      - name: Migrate (release step, run from the image)
+        run: docker run --rm --network host -e DATABASE_URL backend:ci alembic upgrade head
+
+      - name: Start and wait for readiness
+        run: |
+          docker run -d --name backend --network host \
+            -e DATABASE_URL -e OPENAI_API_KEY=sk-ci-not-used -e JWT_SECRET=ci-only \
+            backend:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health/ready; then exit 0; fi
+            sleep 2
+          done
+          docker logs backend
+          exit 1
+
   frontend:
     name: Frontend (${{ matrix.app }})
     runs-on: ubuntu-latest

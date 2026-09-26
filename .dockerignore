@@ -1,0 +1,26 @@
+# Only src/, database/, alembic.ini, project_config.yaml, pyproject.toml and
+# uv.lock are needed in the image -- keep everything else (and every secret)
+# out of the build context.
+.git
+.github
+.claude
+.venv
+**/__pycache__
+**/*.pyc
+.mypy_cache
+.pytest_cache
+.ruff_cache
+
+.env
+.env.*
+
+client_ui
+admin_ui
+eval
+experiments
+tests
+scripts
+seed
+*.md
+*.txt
+sourceme.sh
