@@ -10,8 +10,9 @@ MIN_JWT_SECRET_LENGTH = 32
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # "development" (default) or "production". Production refuses to start
-    # with any dev placeholder still in place -- see _check_production.
+    # "development" (local, the default), "staging" (the deployed dev branch)
+    # or "production". Any deployed environment refuses to start with dev
+    # placeholder secrets still in place -- see _check_deployed.
     environment: str = "development"
 
     # local dev placeholder -- override via .env for your actual Postgres credentials
@@ -50,11 +51,12 @@ class Settings(BaseSettings):
     sentry_traces_sample_rate: float = 0.05
 
     @model_validator(mode="after")
-    def _check_production(self) -> "Settings":
-        """Fail fast at startup instead of running production with a
-        forgeable JWT secret, a default superadmin password, or an email
-        backend that silently drops onboarding invites."""
-        if self.environment != "production":
+    def _check_deployed(self) -> "Settings":
+        """Fail fast at startup instead of running on a public URL with a
+        forgeable JWT secret or a default superadmin password. Production
+        additionally needs real email -- the console backend silently drops
+        onboarding invites; staging may keep it."""
+        if self.environment == "development":
             return self
         problems = []
         if "CHANGE_ME" in self.jwt_secret or len(self.jwt_secret) < MIN_JWT_SECRET_LENGTH:
@@ -65,10 +67,10 @@ class Settings(BaseSettings):
             problems.append("OPENAI_API_KEY is not set")
         if "CHANGE_ME" in self.database_url:
             problems.append("DATABASE_URL is not set")
-        if self.email_backend != "smtp":
+        if self.environment == "production" and self.email_backend != "smtp":
             problems.append("EMAIL_BACKEND must be 'smtp' (console only logs emails)")
         if problems:
-            raise ValueError("unsafe production configuration: " + "; ".join(problems))
+            raise ValueError(f"unsafe {self.environment} configuration: " + "; ".join(problems))
         return self
 
 

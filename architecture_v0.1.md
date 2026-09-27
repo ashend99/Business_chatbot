@@ -384,8 +384,11 @@ since it's about *how to run things*, not *what the system is*.
 - **Deployment** ([docs/deployment.md](docs/deployment.md)): backend image on
   Railway (`railway.json`: migrations as a pre-deploy step, never on
   startup), frontends on Vercel, Supabase Postgres. Browsers never call the
-  backend directly, so it has no CORS. `ENVIRONMENT=production` refuses to
-  start with dev placeholders (`core/config.py`). Health: `/health`
+  backend directly, so it has no CORS. A deployed environment
+  (`ENVIRONMENT=staging` for the `dev` branch, `production` for `main`)
+  refuses to start with dev placeholder secrets; production also requires
+  SMTP (`core/config.py`). Currently only `dev` is deployed, against the
+  existing Supabase project. Health: `/health`
   (liveness, no DB) and `/health/ready` (DB check).
 - **Abuse/cost limits**: `POST /bot/message` has per-customer and per-tenant
   burst limits (`services/rate_limit.py`, `bot.rate_limit` in

@@ -1,4 +1,5 @@
-"""ENVIRONMENT=production refuses to start with dev placeholders."""
+"""Deployed environments (staging, production) refuse to start with dev
+placeholders; production also requires real email."""
 
 import pytest
 from pydantic import ValidationError
@@ -38,6 +39,24 @@ def test_safe_production_config_is_accepted() -> None:
 def test_unsafe_production_config_is_rejected(override: dict, message: str) -> None:
     with pytest.raises(ValidationError, match=message):
         make(**override)
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"jwt_secret": "short"},
+        {"superadmin_password": "CHANGE_ME"},
+        {"openai_api_key": "CHANGE_ME"},
+    ],
+)
+def test_staging_also_rejects_placeholder_secrets(override: dict) -> None:
+    """The deployed dev branch is on a public URL too."""
+    with pytest.raises(ValidationError, match="unsafe staging configuration"):
+        make(environment="staging", **override)
+
+
+def test_staging_may_use_console_email() -> None:
+    assert make(environment="staging", email_backend="console").email_backend == "console"
 
 
 def test_development_allows_placeholders() -> None:
