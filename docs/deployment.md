@@ -50,6 +50,16 @@ Keep `.env` open; Step 2 copies `DATABASE_URL` and `OPENAI_API_KEY` from it.
 
 ### Step 2 -- Render: the backend
 
+> **No card on file?** Render requires one for Blueprints, even on the free
+> plan. Instead use **New → Web Service**: Git Provider → `Business_chatbot`,
+> Runtime **Docker**, Branch **`dev`**, Region **Singapore**, Instance Type
+> **Free**; add every variable from `render.yaml`'s `envVars` by hand
+> (`ENVIRONMENT=staging`, `RUN_MIGRATIONS_ON_START=1`, `EMAIL_BACKEND=console`,
+> `JWT_SECRET` from `python -c "import secrets; print(secrets.token_urlsafe(48))"`,
+> plus the five in the table below); under Advanced set Health Check Path
+> `/health` and Auto-Deploy **After CI Checks Pass** (or later in Settings →
+> Build & Deploy). Then continue at item 4.
+
 1. Go to <https://render.com>, sign up / log in **with GitHub**, and allow
    Render access to the `Business_chatbot` repository.
 2. **New → Blueprint**. Pick the `Business_chatbot` repo and branch **`dev`**.
