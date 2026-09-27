@@ -86,8 +86,11 @@ jobs:
 
       - name: Start and wait for readiness
         run: |
+          # RUN_MIGRATIONS_ON_START=1 exercises the Render dev path
+          # (render.yaml); a no-op here since the step above already migrated
           docker run -d --name backend --network host \
             -e DATABASE_URL -e OPENAI_API_KEY=sk-ci-not-used -e JWT_SECRET=ci-only \
+            -e RUN_MIGRATIONS_ON_START=1 \
             backend:ci
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:8000/health/ready; then exit 0; fi

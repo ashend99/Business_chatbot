@@ -17,7 +17,9 @@ projects and setting their variables, following
 [docs/operations.md](../../docs/operations.md). Deviations from the plan
 below: branch flow is `main` only for now (no `develop`/staging yet);
 Sentry is backend-only (frontend errors via Vercel logs until the Sentry
-wizard is run per app).
+wizard is run per app). Update: the backend host is **Render** (free plan,
+`render.yaml`), not Railway, and only the `dev` branch is deployed, against
+the existing Supabase project -- see docs/deployment.md.
 
 ## Target topology
 

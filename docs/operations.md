@@ -8,7 +8,7 @@ The backend reports unhandled errors to Sentry when `SENTRY_DSN` is set
 (`app/core/observability.py`); without it Sentry is off.
 
 1. Create a Sentry project (platform: FastAPI) and copy its DSN.
-2. Railway → backend service → Variables: `SENTRY_DSN=<dsn>`. Optional:
+2. Render → backend service → Environment: `SENTRY_DSN=<dsn>`. Optional:
    `SENTRY_TRACES_SAMPLE_RATE` (default `0.05` = 5% of requests traced).
 3. Redeploy. Errors are tagged with `ENVIRONMENT`.
 
@@ -80,8 +80,8 @@ project when drilling, not over production.
 
 | Symptom | First check |
 |---|---|
-| Bot replies with the fallback message | Sentry / Railway logs for the agent error; OpenAI status and key |
+| Bot replies with the fallback message | Sentry / Render logs for the agent error; OpenAI status and key |
 | `/health/ready` 503 | Supabase status; `DATABASE_URL` still valid |
-| Deploy stuck / failed | Railway deploy logs -- a failed `alembic upgrade head` aborts the deploy and the previous version keeps serving |
+| Deploy stuck / failed | Render deploy logs -- a failed `alembic upgrade head` stops the new container and the previous version keeps serving |
 | Tenant says bot went silent | admin settings: `bot_enabled`, `monthly_message_limit`; tenant's `allowed_channels` |
-| Emails not arriving | `EMAIL_BACKEND=smtp` and `SMTP_*` on Railway; provider's sending logs |
+| Emails not arriving | `EMAIL_BACKEND=smtp` and `SMTP_*` on Render; provider's sending logs |

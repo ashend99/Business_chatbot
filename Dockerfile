@@ -4,8 +4,10 @@
 #   docker run --env-file .env -p 8000:8000 business-chatbot-backend
 #   docker run --env-file .env business-chatbot-backend alembic upgrade head   # migrations
 #
-# Migrations are a separate release step, never run on startup: several app
-# instances starting at once must not race to migrate.
+# Migrations are normally a separate release step, not run on startup:
+# several app instances starting at once must not race to migrate. The
+# exception is RUN_MIGRATIONS_ON_START=1, for a single-instance host with no
+# pre-deploy hook (the dev environment on Render's free plan, render.yaml).
 
 # ---- builder: resolve dependencies with uv from the lockfile -----------------
 FROM python:3.11-slim AS builder
@@ -46,6 +48,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ[\"PORT\"]}/health', timeout=4)"
 
-# PORT is injected by the host (Railway/Render/Fly); --proxy-headers because
+# PORT is injected by the host (Render, Fly, ...); --proxy-headers because
 # the app always sits behind the platform's TLS-terminating proxy
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*'"]
+CMD ["sh", "-c", "if [ \"$RUN_MIGRATIONS_ON_START\" = 1 ]; then alembic upgrade head || exit 1; fi; exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*'"]

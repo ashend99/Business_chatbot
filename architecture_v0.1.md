@@ -382,8 +382,10 @@ since it's about *how to run things*, not *what the system is*.
   pgvector service; the Docker image is built, migrated and health-checked;
   both frontends lint, type-check and build.
 - **Deployment** ([docs/deployment.md](docs/deployment.md)): backend image on
-  Railway (`railway.json`: migrations as a pre-deploy step, never on
-  startup), frontends on Vercel, Supabase Postgres. Browsers never call the
+  Render (`render.yaml`, deploys after CI passes; on the free plan the
+  container runs migrations on start via `RUN_MIGRATIONS_ON_START=1` since
+  there is no pre-deploy hook -- production on a paid plan uses a pre-deploy
+  command instead), frontends on Vercel, Supabase Postgres. Browsers never call the
   backend directly, so it has no CORS. A deployed environment
   (`ENVIRONMENT=staging` for the `dev` branch, `production` for `main`)
   refuses to start with dev placeholder secrets; production also requires

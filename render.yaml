@@ -1,0 +1,49 @@
+# Render Blueprint for the backend's dev environment (branch `dev`, existing
+# Supabase database). Step-by-step setup: docs/deployment.md.
+# The two Next.js apps deploy to Vercel, not here.
+services:
+  - type: web
+    name: business-chatbot-backend-dev
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    branch: dev
+    # closest Render region to the Supabase project (ap-northeast-2)
+    region: singapore
+    plan: free
+    healthCheckPath: /health
+    # deploy only after GitHub Actions CI passes on the commit
+    autoDeployTrigger: checksPass
+    # a frontend-only commit doesn't rebuild the backend
+    buildFilter:
+      paths:
+        - src/**
+        - database/**
+        - Dockerfile
+        - pyproject.toml
+        - uv.lock
+        - alembic.ini
+        - project_config.yaml
+    envVars:
+      - key: ENVIRONMENT
+        value: staging
+      # the free plan has no pre-deploy hook, so the container migrates on
+      # start (fine for one instance). On a paid plan, remove this and set
+      # preDeployCommand: alembic upgrade head instead.
+      - key: RUN_MIGRATIONS_ON_START
+        value: "1"
+      - key: EMAIL_BACKEND
+        value: console
+      - key: JWT_SECRET
+        generateValue: true
+      # sync: false -> Render asks you for these values when you create the
+      # Blueprint (they are never stored in this file)
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: SUPERADMIN_EMAIL
+        sync: false
+      - key: SUPERADMIN_PASSWORD
+        sync: false
+      - key: CLIENT_DASHBOARD_URL
+        sync: false
