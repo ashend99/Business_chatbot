@@ -2,15 +2,16 @@
 
 What this system actually is, as of this version — not a plan, a snapshot of
 the real, working code. The original phase-by-phase design lives in
-[.claude/plan/](.claude/plan/) and is kept as a historical record; several of
+[.claude/plan/](../plan/) and is kept as a historical record; several of
 its decisions (notably Phase 4's intent router) were superseded during
 implementation and are called out below where that happened. For how to run
-and modify things day to day, see [AGENTS.md](AGENTS.md).
+and modify things day to day, see [AGENTS.md](../../AGENTS.md).
 
 ## 1. System overview
 
 A multi-tenant AI chatbot platform for small businesses. One FastAPI backend,
-one Next.js client dashboard, one Postgres database (with `pgvector` for
+two Next.js apps (`client_ui`, the tenant dashboard, and `admin_ui`, the
+platform-admin console), one Postgres database (with `pgvector` for
 embeddings). Each tenant (a business) configures a knowledge base
 (documents), a product/service catalog, and lead-capture fields through the
 dashboard; an LLM agent then handles that business's customer conversations
@@ -39,8 +40,17 @@ Shared Postgres, isolated at the application layer:
   `get_current_tenant_id`) and a distinct `api_secret`-key scheme for
   service callers hitting `/bot/message` (`get_current_service_tenant`,
   `TenantApiKeys` table). A platform-admin scope exists separately for
-  tenant onboarding (`superadmin` router), env-configured credentials, no
-  DB table.
+  tenant management (`superadmin` routers — onboarding, suspend/reactivate,
+  admin settings, API keys), env-configured credentials, no DB table.
+- **Tenant account lifecycle.** A superadmin creates a tenant, which emails
+  an invite link (`InviteTokens` table: hashed, expiring, single-use;
+  re-sendable via `/superadmin/tenants/{id}/resend-invite`). The tenant sets
+  its own login at `/auth/activate` → `/auth/activate/set-credentials`;
+  forgotten passwords go through `/auth/request-password-reset` →
+  `/auth/reset-password` (same token table). `Tenants.is_active=false`
+  (`/superadmin/tenants/{id}/suspend`, undone by `/reactivate`) suspends a
+  tenant: both `get_current_tenant_id` and `get_current_service_tenant`
+  return 403, so the dashboard *and* the bot stop working for it.
 
 ## 3. Backend module map (`src/app/`)
 
@@ -51,11 +61,12 @@ repos/        query functions, filenames mirror models/. Every function
               takes tenant_id explicitly and filters through tenant_scope()
 schemas/      Pydantic request/response models, filenames mirror models/
 services/     business logic: bot_engine, bot_tools, prompt_builder,
-              settings_resolver, money, chunking, embeddings, publishing,
-              notifications, onboarding, email
-api/          FastAPI routers: auth/, superadmin/ (tenants, settings,
-              api keys), tenant/ (one file per dashboard resource),
-              bot/ (POST /bot/message)
+              settings_resolver, money, file_parsing, chunking, embeddings,
+              publishing, notifications, onboarding, email, rate_limit
+api/          FastAPI routers: auth/ (tenant login, activation, password
+              reset), superadmin/ (auth, tenants, settings + api keys),
+              tenant/ (one file per dashboard resource),
+              bot/ (POST /bot/message), health/ (/health, /health/ready)
 core/         config (pydantic-settings), security (JWT/password hashing),
               deps (get_current_tenant_id, get_current_service_tenant, ...)
 components/rag/  retrieval implementations (naive + hybrid)
@@ -155,7 +166,7 @@ become a real target later.
 
 ### Guardrails — the recurring lesson: prompt instructions alone aren't reliable
 
-Three places in `bot_engine.py`/`repos/` where a fact the LLM could get
+Four places in `bot_engine.py`/`repos/` where a fact the LLM could get
 wrong is checked mechanically, not just requested in the system prompt:
 
 1. **Pricing guardrail** (`_apply_pricing_guardrail`) — after generation,
@@ -175,7 +186,14 @@ wrong is checked mechanically, not just requested in the system prompt:
    human-confirmation mode a successful `confirm_order` only *submits*, so a
    "confirmed/placed" claim is always replaced with the accurate "submitted"
    message.
-3. **Server-side enforcement in `repos/orders.py`'s `confirm_order`** —
+3. **Discount guardrail** (`_apply_discount_guardrail`) — a reply promising
+   a percentage discount is replaced with a "prices are as listed, I can pass
+   a request along" message unless every quoted percentage appears in this
+   thread's `search_documents` output (i.e. a real, published promo).
+   Catalog prices are fixed, so an unsupported "20% off" is invented —
+   typically the model obeying a tenant's `custom_instructions` over the
+   pricing rules.
+4. **Server-side enforcement in `repos/orders.py`'s `confirm_order`** —
    raises `MissingRequiredContactInfo`, `MissingFulfillmentInfo`,
    `FulfillmentTypeNotOffered`, `MissingFulfillmentDetail` (delivery needs an
    address) and `BelowMinimumOrder` instead of trusting the agent to have
@@ -247,12 +265,15 @@ must go through the API, or the running server won't see it for up to the TTL.
   "awaiting your confirmation" wording.
 
 **Onboarding**: `TenantCreate` requires `currency_code` (plus optional initial
-`timezone` and an `admin_settings` block); `onboard_tenant` seeds both rows.
-There is no superadmin UI — admin settings and API keys are API-only for now.
+`timezone` and an `admin_settings` block); `onboard_tenant` seeds both rows
+and sends the invite (see §2). All of this — plus admin settings and API
+keys — is managed from the `admin_ui` console (§8).
 
 ## 6. RAG (`components/rag/`)
 
-`get_rag()` returns a hybrid retriever (dense embedding search + BM25,
+Documents come in as PDF/DOCX/TXT uploads or a URL import
+(`services/file_parsing.py`; no OCR, so scanned/image-only PDFs extract
+little or no text). `get_rag()` returns a hybrid retriever (dense embedding search + BM25,
 reciprocal rank fusion) over `DocumentChunk` rows. Documents go through a
 draft → publish lifecycle (`services/publishing.py`): chunking
 (`services/chunking.py`, `RecursiveCharacterTextSplitter`), embedding
@@ -282,7 +303,9 @@ already gives every product a natural inheritance path. `search_catalog`
 and `browse_catalog` both live in `repos/catalog.py`; the latter's category
 filter expands to the full matched subtree (see §4).
 
-## 8. Dashboard (`client_ui/`)
+## 8. Frontends (`client_ui/`, `admin_ui/`)
+
+### Tenant dashboard (`client_ui/`)
 
 Next.js App Router, Tailwind v4. Established UI pattern used across every
 data page: a list (with status-tab filters) on the left, a detail panel on
@@ -306,10 +329,25 @@ API keys). Every price is formatted in the tenant's currency via a
 `CurrencyProvider` set once in the `(app)` layout (an order uses its own
 snapshotted `currency_code`).
 
+Outside the `(app)` layout, the `(auth)` pages handle **login**,
+**activate** (the invite link, §2), **forgot-password** and
+**reset-password**.
+
 A standalone `/widget-test` page (outside the dashboard's auth, like a real
 embedded site widget) exercises `POST /bot/message` directly through a
 server-side proxy route that holds the `api_secret` key
 (`BOT_API_SECRET` in `client_ui/.env.local`) so the browser never sees it.
+
+### Platform-admin console (`admin_ui/`)
+
+A separate Next.js app (port 3001 in dev), logged into with the
+env-configured superadmin credentials (`/superadmin/auth/login`), not a
+tenant account. Same browser → own `/api/*` proxy routes → backend pattern
+as `client_ui`. One real page, **Tenants** (the root redirects there): a
+list filterable by active/suspended, a create-tenant dialog (onboarding,
+§5), and a detail panel for editing the tenant, its admin settings
+(currency, entitlements, channels, LLM model, quotas), issuing/revoking
+`api_secret` keys, resending the invite, and suspending/reactivating.
 
 ## 9. `eval/` harness
 
@@ -344,8 +382,6 @@ transcript yourself — not as an authoritative result.
 
 ## 10. Known gaps / deliberately out of scope
 
-- **No superadmin UI** — admin settings and `api_secret` keys are managed
-  via the `/superadmin` API only.
 - **`max_documents` not enforced** — stored only. (`monthly_message_limit`
   *is* enforced, see §12.)
 - **No live human handoff** — negotiation `escalate` only records the request;
@@ -367,7 +403,7 @@ transcript yourself — not as an authoritative result.
 
 ## 11. Environment gotchas
 
-See [AGENTS.md](AGENTS.md)'s "Environment gotchas" section — kept there
+See [AGENTS.md](../../AGENTS.md)'s "Environment gotchas" section — kept there
 since it's about *how to run things*, not *what the system is*.
 
 ## 12. Production: tests, CI, deployment, operations
@@ -381,7 +417,7 @@ since it's about *how to run things*, not *what the system is*.
   real-error rules on `src/`), mypy, the full suite against a throwaway
   pgvector service; the Docker image is built, migrated and health-checked;
   both frontends lint, type-check and build.
-- **Deployment** ([docs/deployment.md](docs/deployment.md)): backend image on
+- **Deployment** ([docs/deployment.md](../../docs/deployment.md)): backend image on
   Render (`render.yaml`, deploys after CI passes; on the free plan the
   container runs migrations on start via `RUN_MIGRATIONS_ON_START=1` since
   there is no pre-deploy hook -- production on a paid plan uses a pre-deploy
@@ -398,6 +434,6 @@ since it's about *how to run things*, not *what the system is*.
   `monthly_message_limit`: past it the bot goes silent like
   `bot_enabled=false` (message stored, no LLM call) with a
   `message_limit_reached` action.
-- **Operations** ([docs/operations.md](docs/operations.md)): Sentry (backend,
+- **Operations** ([docs/operations.md](../../docs/operations.md)): Sentry (backend,
   only with `SENTRY_DSN`, configured to send no request bodies or personal
   data), uptime monitoring on `/health/ready`, backups and a restore drill.

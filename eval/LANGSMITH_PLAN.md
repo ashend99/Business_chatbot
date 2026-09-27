@@ -3,7 +3,7 @@
 Status: **implemented**, in `eval/langsmith_eval/`. This is still kept as
 the design record — the "why" behind decisions the code doesn't otherwise
 explain — not just a historical artifact; see [CLAUDE.md](CLAUDE.md) for the
-day-to-day usage reference and [../architecture_v0.1.md](../architecture_v0.1.md)
+day-to-day usage reference and [architecture_v0.1.md](../.claude/architectures/architecture_v0.1.md)
 for the bot itself.
 
 **Deviations from this plan, as actually built:**

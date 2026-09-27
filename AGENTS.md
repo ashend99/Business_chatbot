@@ -2,7 +2,7 @@
 
 Practical, action-oriented notes for anyone (human or agent) picking up this
 codebase. For what the system *is* — modules, the agent's tools, the data
-model — read [architecture_v0.1.md](architecture_v0.1.md) first. This file
+model — read [architecture_v0.1.md](.claude/architectures/architecture_v0.1.md) first. This file
 is about how to actually run and modify it without rediscovering the same
 gotchas.
 

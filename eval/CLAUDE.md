@@ -1,7 +1,7 @@
 # eval/ harness
 
 Simulated-customer conversations against the real bot, graded later by a
-separate LLM judge. See [architecture_v0.1.md](../architecture_v0.1.md)'s
+separate LLM judge. See [architecture_v0.1.md](../.claude/architectures/architecture_v0.1.md)'s
 "eval/ harness" section for the full picture; this is quick local reference.
 
 ## Running it
