@@ -117,5 +117,8 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
+      # next-env.d.ts and .next/types (global route types like LayoutProps)
+      # are generated, not committed -- create them before type-checking
+      - run: npx next typegen
       - run: npx tsc --noEmit
       - run: npm run build
